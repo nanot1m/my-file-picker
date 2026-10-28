@@ -7,9 +7,12 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private static let listSize = NSSize(width: 680, height: 460)
     private static let previewWidth: CGFloat = 300
     private static let previewKey = "previewEnabled"
-    private static let browseHints = "↵ open  ⌘↵ actions  ⌘P preview  ⌘C path  ⌘⇧V paste into app  ⌘R rename  ⌘⌫ trash  esc"
-    private static let compactHints = "↵ open  ⌘↵ actions  ⌘P preview  esc"
-    private var browseHints: String { previewEnabled ? Self.compactHints : Self.browseHints }
+    private static let browseHints: [Hint] = [
+        Hint(key: "↵", label: "open"), Hint(key: "⌘↵", label: "actions"), Hint(key: "⌘P", label: "preview"),
+        Hint(key: "⌘C", label: "copy path"), Hint(key: "⌘⇧V", label: "paste into app"),
+        Hint(key: "⌘R", label: "rename"), Hint(key: "⌘⌫", label: "trash"), Hint(key: "esc", label: "close"),
+    ]
+    private var browseHints: [Hint] { Self.browseHints }
     private static let browsePlaceholder = "Search or type a new name"
 
     private enum Row {
@@ -21,7 +24,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private struct Picker {
         let title: String
         let placeholder: String
-        let hints: String
+        let hints: [Hint]
         let listing: DirectoryListing
         let icon: (Int) -> NSImage
         let select: (Int) -> Void
@@ -52,8 +55,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var panel: LauncherPanel!
     private let pathLabel = NSTextField(labelWithString: "")
     private let searchField = NSTextField()
-    private let hintsLabel = NSTextField(labelWithString: LauncherController.browseHints)
-    private let statusLabel = NSTextField(labelWithString: "")
+    private let hintsBar = HintsBar(frame: .zero)
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
     private let previewSeparator = NSBox()
@@ -181,20 +183,10 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         previewView.shouldCloseWithWindow = false
         effect.addSubview(previewView)
 
-        hintsLabel.frame = NSRect(x: 16, y: 8, width: w * 0.80, height: 16)
-        hintsLabel.font = .systemFont(ofSize: 11)
-        hintsLabel.textColor = .secondaryLabelColor
-        hintsLabel.lineBreakMode = .byTruncatingTail
-        hintsLabel.autoresizingMask = [.maxYMargin]
-        effect.addSubview(hintsLabel)
-
-        statusLabel.frame = NSRect(x: w * 0.80 + 8, y: 8, width: w * 0.20 - 24, height: 16)
-        statusLabel.font = .systemFont(ofSize: 11)
-        statusLabel.textColor = .tertiaryLabelColor
-        statusLabel.alignment = .right
-        statusLabel.lineBreakMode = .byTruncatingMiddle
-        statusLabel.autoresizingMask = [.maxYMargin]
-        effect.addSubview(statusLabel)
+        hintsBar.frame = NSRect(x: 0, y: 0, width: w, height: 30)
+        hintsBar.autoresizingMask = [.maxYMargin]
+        hintsBar.hints = browseHints
+        effect.addSubview(hintsBar)
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
         column.resizingMask = .autoresizingMask
@@ -238,10 +230,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         pathLabel.frame.size.width = listWidth - 32
         searchField.frame.size.width = listWidth - 28
         for separator in horizontalSeparators { separator.frame.size.width = listWidth }
-        let hintsFraction: CGFloat = previewEnabled ? 0.58 : 0.80
-        hintsLabel.frame.size.width = listWidth * hintsFraction
-        statusLabel.frame = NSRect(x: listWidth * hintsFraction + 8, y: 8, width: listWidth * (1 - hintsFraction) - 24, height: 16)
-        if case .browse = mode { hintsLabel.stringValue = browseHints }
+        hintsBar.frame.size.width = listWidth
+        hintsBar.needsDisplay = true
+        if case .browse = mode, query.isEmpty { setStatus(stats) }
         scrollView.frame.size.width = listWidth
         scrollView.tile()
         tableView.frame.size.width = scrollView.contentSize.width
@@ -313,8 +304,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     }
 
     private func setStatus(_ text: String) {
-        statusLabel.stringValue = text
-        statusLabel.toolTip = text
+        hintsBar.status = previewEnabled && text == stats ? String(text.prefix { $0 != "·" }).trimmingCharacters(in: .whitespaces) : text
     }
 
     // MARK: - Filtering
@@ -516,7 +506,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         listing = picker.listing
         pathLabel.stringValue = picker.title
         searchField.placeholderString = picker.placeholder
-        hintsLabel.stringValue = picker.hints
+        hintsBar.hints = picker.hints
         clearQuery()
         tableView.reloadData()
         if rowCount > 0 { selectRow(0) }
@@ -533,7 +523,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         listing = saved.listing
         pathLabel.stringValue = displayPath(currentPath)
         searchField.placeholderString = Self.browsePlaceholder
-        hintsLabel.stringValue = browseHints
+        hintsBar.hints = browseHints
         filterGeneration += 1
         query = saved.query
         searchField.stringValue = saved.query
@@ -577,7 +567,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         enterPicker(Picker(
             title: "Actions for “\(name)”",
             placeholder: "Search actions",
-            hints: "↵ run   esc back",
+            hints: [Hint(key: "↵", label: "run"), Hint(key: "esc", label: "back")],
             listing: .synthetic(actions.map(\.title)),
             icon: { icons[$0] },
             select: { [weak self] i in
@@ -597,7 +587,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                 self.enterPicker(Picker(
                     title: "Open “\(URL(fileURLWithPath: target).lastPathComponent)” with",
                     placeholder: "Search applications",
-                    hints: "↵ open with selected app   esc back",
+                    hints: [Hint(key: "↵", label: "open with selected app"), Hint(key: "esc", label: "back")],
                     listing: apps.listing,
                     icon: { [weak self] i in self?.cachedIcon(forFile: apps.path(at: i)) ?? NSImage() },
                     select: { [weak self] i in
@@ -616,7 +606,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         let url = URL(fileURLWithPath: target)
         mode = .rename(target: target, saved: saved)
         pathLabel.stringValue = "Rename “\(url.lastPathComponent)”"
-        hintsLabel.stringValue = "↵ rename   esc cancel"
+        hintsBar.hints = [Hint(key: "↵", label: "rename"), Hint(key: "esc", label: "cancel")]
         matches = nil
         showCreateRows = false
         tableView.reloadData()
