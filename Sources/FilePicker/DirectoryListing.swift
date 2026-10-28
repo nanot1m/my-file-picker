@@ -45,6 +45,20 @@ final class DirectoryListing {
         return nil
     }
 
+    /// Safe to call off the main thread; the listing is immutable once read.
+    func filter(query: String) -> (indices: [UInt32], exactMatch: Bool) {
+        guard count > 0 else { return ([], false) }
+        var out = [fse_match](repeating: fse_match(), count: count)
+        let n = Int(fse_filter(dir, query, &out))
+        var indices = [UInt32](repeating: 0, count: n)
+        var exact = false
+        for i in 0..<n {
+            indices[i] = out[i].index
+            if !exact, out[i].score >= 0, query.withCString({ strcmp($0, fse_entry_name(dir, out[i].index)) == 0 }) { exact = true }
+        }
+        return (indices, exact)
+    }
+
     private func flags(at index: Int) -> UInt16 { dir.pointee.entries[index].flags }
 }
 

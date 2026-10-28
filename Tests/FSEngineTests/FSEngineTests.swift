@@ -97,3 +97,28 @@ private func names(_ d: UnsafeMutablePointer<fse_dir>) -> [String] {
     #expect(fse_name_compare("Same", "same") != 0)
     #expect(fse_name_compare("b", "a") > 0)
 }
+
+@Test func fuzzyScore() {
+    #expect(fse_fuzzy_score("Makefile", "xyz") < 0)
+    #expect(fse_fuzzy_score("Makefile", "") == 0)
+    #expect(fse_fuzzy_score("Makefile", "mk") >= 0)
+    #expect(fse_fuzzy_score("Makefile", "make") > fse_fuzzy_score("some-make-thing", "make"))
+    #expect(fse_fuzzy_score("Package.swift", "ps") > fse_fuzzy_score("apps", "ps"))
+    #expect(fse_fuzzy_score("README.md", "readme.md") > fse_fuzzy_score("README.md.bak", "readme.md"))
+}
+
+@Test func filterOrdersBestFirst() throws {
+    let t = try TempDir(); defer { t.cleanup() }
+    try t.touch("Makefile")
+    try t.touch("some-make-thing")
+    try t.mkdir("maker")
+    try t.touch("unrelated")
+    let d = try t.read(); defer { fse_dir_free(d) }
+    var out = [fse_match](repeating: fse_match(), count: Int(d.pointee.count))
+    let n = fse_filter(d, "make", &out)
+    #expect(n == 3)
+    let ordered = (0..<Int(n)).map { String(cString: fse_entry_name(d, out[$0].index)) }
+    #expect(ordered.first == "Makefile" || ordered.first == "maker")
+    #expect(ordered.last == "some-make-thing")
+    #expect(fse_filter(d, "", &out) == 4)
+}

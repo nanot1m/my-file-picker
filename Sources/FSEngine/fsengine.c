@@ -205,3 +205,60 @@ void fse_dir_free(fse_dir *d) {
 size_t fse_dir_memory(const fse_dir *d) {
     return sizeof *d + (size_t)d->cap * sizeof(fse_entry) + d->arena_cap;
 }
+
+static int is_separator(int c) {
+    return c == ' ' || c == '-' || c == '_' || c == '.' || c == '/' || c == '(' || c == '[';
+}
+
+int32_t fse_fuzzy_score(const char *name, const char *query) {
+    if (!*query) return 0;
+    int32_t score = 0;
+    int consecutive = 0, first = -1, prev = 0;
+    size_t qi = 0, i = 0;
+    for (; name[i] && query[qi]; i++) {
+        int c = (unsigned char)name[i];
+        if (tolower(c) == tolower((unsigned char)query[qi])) {
+            int bonus = 2;
+            if (i == 0) bonus += 16;
+            else if (is_separator(prev)) bonus += 10;
+            else if (islower(prev) && isupper(c)) bonus += 8;
+            else if (isdigit(c) != isdigit(prev)) bonus += 4;
+            if (consecutive) bonus += 6 + (consecutive < 4 ? consecutive : 4);
+            if (c == (unsigned char)query[qi]) bonus += 1;
+            score += bonus;
+            consecutive++;
+            qi++;
+            if (first < 0) first = (int)i;
+        } else {
+            if (first >= 0) score -= 1;
+            consecutive = 0;
+        }
+        prev = c;
+    }
+    if (query[qi]) return -1;
+    if (!name[i] && i == qi) score += 20;
+    score -= first > 10 ? 10 : first;
+    return score;
+}
+
+static int compare_matches(void *thunk, const void *pa, const void *pb) {
+    const fse_dir *d = thunk;
+    const fse_match *a = pa, *b = pb;
+    if (a->score != b->score) return a->score > b->score ? -1 : 1;
+    int da = (d->entries[a->index].flags & FSE_DIR) != 0, db = (d->entries[b->index].flags & FSE_DIR) != 0;
+    if (da != db) return da ? -1 : 1;
+    return a->index < b->index ? -1 : 1;
+}
+
+uint32_t fse_filter(const fse_dir *d, const char *query, fse_match *out) {
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < d->count; i++) {
+        int32_t s = fse_fuzzy_score(d->arena + d->entries[i].name_off, query);
+        if (s < 0) continue;
+        out[n].index = i;
+        out[n].score = s;
+        n++;
+    }
+    if (n > 1) qsort_r(out, n, sizeof *out, (void *)d, compare_matches);
+    return n;
+}

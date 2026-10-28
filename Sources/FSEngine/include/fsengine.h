@@ -53,6 +53,17 @@ int fse_name_compare(const char *a, const char *b);
 
 uint64_t fse_now_ns(void);
 
+typedef struct {
+    uint32_t index;
+    int32_t  score;
+} fse_match;
+
+/* Case-insensitive subsequence score; negative means no match. Higher is better. */
+int32_t fse_fuzzy_score(const char *name, const char *query);
+
+/* Writes matches (best first) to out, which must hold d->count elements. Returns match count. */
+uint32_t fse_filter(const fse_dir *d, const char *query, fse_match *out);
+
 #ifdef __cplusplus
 }
 #endif

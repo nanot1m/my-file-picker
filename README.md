@@ -21,12 +21,13 @@ FP_PERF=1 build/FilePicker.app/Contents/MacOS/FilePicker   # log latency measure
 | Key | Action |
 |---|---|
 | ⌥ Space | Toggle launcher |
+| typing | Fuzzy-filter the current directory; a name that doesn't exist offers "Create folder" / "Create file" |
 | ↑ / ↓ | Move selection |
-| → / Enter | Enter directory; Enter opens files with the default app |
-| ← | Parent directory |
+| → / Enter | Enter directory; Enter opens files with the default app or creates the typed name |
+| ← | Parent directory (when the search field is empty) |
 | ⌘C | Copy absolute path |
 | ⌘⇧O | Open with chosen application |
-| Esc | Hide |
+| Esc | Clear search, then hide |
 
 ## Layout
 
