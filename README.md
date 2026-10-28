@@ -129,3 +129,7 @@ Roadmap: directory cache with FSEvents invalidation, async per-file icons, incre
 ## License
 
 MIT
+
+## Signed releases
+
+See [release setup and required GitHub secrets](docs/RELEASING.md) for automated Developer ID signing, Apple notarization, stapling, and GitHub Releases.

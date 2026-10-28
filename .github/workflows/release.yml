@@ -3,23 +3,58 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-15
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a vMAJOR.MINOR.PATCH tag'; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
       - name: Test
         run: swift test
-      - name: Package
-        run: make dist VERSION=${GITHUB_REF_NAME#v}
-      - name: Publish
+      - name: Build app bundle
+        run: make bundle VERSION="$VERSION"
+      - name: Developer ID sign, notarize, staple and package
+        shell: bash
+        env:
+          APP_PATH: build/FilePicker.app
+          ZIP_PATH: build/dist/FilePicker-${{ env.VERSION }}.zip
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
+        run: bash scripts/sign-and-notarize.sh
+      - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          gh release create "$GITHUB_REF_NAME" build/dist/* \
-            --title "File Picker $GITHUB_REF_NAME" \
-            --generate-notes
+          assets=("build/dist/FilePicker-$VERSION.zip" "build/dist/FilePicker-$VERSION.zip.sha256")
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+          elif [[ -f CHANGELOG.md ]] && awk -v v="$VERSION" '/^## \[/{p = index($0, "[" v "]") > 0} p' CHANGELOG.md | sed '1d' | grep -q .; then
+            awk -v v="$VERSION" '/^## \[/{p = index($0, "[" v "]") > 0} p' CHANGELOG.md | sed '1d' > "$RUNNER_TEMP/release-notes.md"
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --verify-tag --notes-file "$RUNNER_TEMP/release-notes.md" --title "File Picker $VERSION"
+          else
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --verify-tag --generate-notes --title "File Picker $VERSION"
+          fi
