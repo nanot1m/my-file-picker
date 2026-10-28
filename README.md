@@ -58,6 +58,10 @@ Leaving the actions or open-with list restores the previous search and selection
 
 When the typed name doesn't match anything exactly, two extra rows appear at the end of the list: **Create folder** and **Create file**. Enter on either creates it in the current folder and selects it.
 
+## Updates
+
+The app checks GitHub Releases every six hours and on "Check for Updates…" in the menu-bar menu or Settings. With "Install updates automatically" on (the default), a newer release is downloaded, its code signature verified (and its Team ID matched to the installed app's when the installed app has one), swapped into place, and the app relaunches. Turn it off in Settings to be asked first. Builds running from the repo's `build/` folder never self-replace.
+
 ## Permissions
 
 - No Full Disk Access. The global hotkey uses Carbon `RegisterEventHotKey`, which needs no Accessibility permission.
