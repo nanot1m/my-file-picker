@@ -24,7 +24,8 @@ printf '%s' "$ASC_PRIVATE_KEY_BASE64" | base64 --decode > "$secret_dir/AuthKey.p
 security create-keychain -p "$keychain_password" "$keychain"
 security set-keychain-settings -lut 21600 "$keychain"
 security unlock-keychain -p "$keychain_password" "$keychain"
-security import "$secret_dir/certificate.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security -t cert -f pkcs12 -k "$keychain" >/dev/null
+security import "$secret_dir/certificate.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security -f pkcs12 -k "$keychain" >/dev/null
+security find-identity -v -p codesigning "$keychain" | grep -Fq "$APPLE_SIGNING_IDENTITY" || { echo 'Signing identity (certificate + private key) not found after import'; exit 1; }
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" >/dev/null
 security list-keychains -d user -s "$keychain" "${original_keychains[@]}"
 # These bundles contain one executable and no nested frameworks or helpers.
@@ -41,9 +42,13 @@ submit_status=0
 xcrun notarytool submit "$secret_dir/submission.zip" --keychain "$keychain" \
   --keychain-profile release-notary --wait --timeout 45m --output-format json \
   > "$secret_dir/result.json" || submit_status=$?
-status=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status", ""))' "$secret_dir/result.json")
+json_field() { python3 -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))
+except Exception: print("")' "$secret_dir/result.json" "$1"; }
+status=$(json_field status)
 if [[ "$submit_status" != 0 || "$status" != Accepted ]]; then
-  submission_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("id", ""))' "$secret_dir/result.json")
+  submission_id=$(json_field id)
+  [[ -s "$secret_dir/result.json" ]] || echo "notarytool produced no output (exit $submit_status)"
   echo "Notarization did not complete successfully: $status (submission $submission_id)"
   if [[ -n "$submission_id" ]]; then
     xcrun notarytool log "$submission_id" --keychain "$keychain" --keychain-profile release-notary || true
