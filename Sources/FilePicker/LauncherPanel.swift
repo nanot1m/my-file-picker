@@ -27,6 +27,7 @@ final class LauncherPanel: NSPanel {
         let selector: Selector?
         switch (event.charactersIgnoringModifiers?.lowercased(), mods) {
         case ("c", [.command]): selector = #selector(NSText.copy(_:))
+        case ("c", [.command, .shift]): selector = Selector(("copyHomeRelativePath:"))
         case ("o", [.command, .shift]): selector = Selector(("openWith:"))
         case ("v", [.command]): selector = #selector(NSText.paste(_:))
         case ("a", [.command]): selector = #selector(NSText.selectAll(_:))

@@ -1,11 +1,16 @@
 import AppKit
 import FSEngine
-import UniformTypeIdentifiers
 
 final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     private static let lastDirectoryKey = "lastDirectory"
     private static let panelSize = NSSize(width: 680, height: 460)
-    private static let hints = "↵ open   → enter   ← back   ⌘C copy path   ⌘⇧O open with   esc close"
+    private static let hints = "↵ open   → enter   ← back   ⌘C copy path   ⌘⇧C copy ~path   ⌘⇧O open with   esc close"
+    private static let openWithHints = "↵ open with selected app   esc back"
+
+    private enum Mode {
+        case browse
+        case openWith(target: String, browse: DirectoryListing, browseRow: Int, apps: ApplicationList)
+    }
 
     private enum Row {
         case entry(Int)
@@ -24,9 +29,10 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private let loader = DirectoryLoader()
     private let workQueue = DispatchQueue(label: "com.hazam.filepicker.filter", qos: .userInteractive)
     private var listing: DirectoryListing?
+    private var mode: Mode = .browse
+    private var appIcons: [String: NSImage] = [:]
     private var currentPath: String
     private var includeHidden = false
-    private var suppressHideOnResign = false
 
     private var query = ""
     private var filterGeneration: UInt64 = 0
@@ -75,7 +81,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        if !suppressHideOnResign { hide() }
+        hide()
     }
 
     // MARK: - UI construction
@@ -174,6 +180,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         setStatus("Loading…")
         loader.load(path, includeHidden: includeHidden) { [weak self] result in
             guard let self else { return }
+            guard case .browse = self.mode else { return }
             switch result {
             case .success(let listing):
                 self.listing = listing
@@ -236,7 +243,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             DispatchQueue.main.async {
                 guard let self, gen == self.filterGeneration else { return }
                 self.matches = indices
-                self.showCreateRows = !exact && !q.contains("/")
+                if case .browse = self.mode { self.showCreateRows = !exact && !q.contains("/") }
                 self.tableView.reloadData()
                 if self.rowCount > 0 { self.selectRow(0) }
                 self.setStatus("\(indices.count) of \(listing.count)")
@@ -279,6 +286,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private var selectedPath: String? {
         guard let listing, let i = selectedEntryIndex else { return nil }
+        if case .openWith(_, _, _, let apps) = mode { return apps.path(at: i) }
         return listing.fullPath(at: i)
     }
 
@@ -303,13 +311,15 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         case #selector(NSResponder.insertNewline(_:)):
             activateSelection()
         case #selector(NSResponder.cancelOperation(_:)):
-            if query.isEmpty { hide() } else { clearQuery(); applyFilter() }
+            if !query.isEmpty { clearQuery(); applyFilter() }
+            else if case .openWith = mode { exitOpenWith() }
+            else { hide() }
         case #selector(NSResponder.moveRight(_:)):
-            guard textView.selectedRange().location == textView.string.utf16.count,
+            guard case .browse = mode, textView.selectedRange().location == textView.string.utf16.count,
                   let i = selectedEntryIndex, isNavigableDirectory(entry: i), let listing else { return false }
             navigate(to: listing.fullPath(at: i))
         case #selector(NSResponder.moveLeft(_:)):
-            guard query.isEmpty else { return false }
+            guard case .browse = mode, query.isEmpty else { return false }
             goToParent()
         default:
             return false
@@ -323,9 +333,11 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         guard let editor = panel.fieldEditor(false, for: searchField) as? NSTextView else { return false }
         switch selector {
         case #selector(NSText.copy(_:)):
-            if editor.selectedRange().length > 0 { editor.copy(nil) } else { copySelectedPath() }
+            if editor.selectedRange().length > 0 { editor.copy(nil) } else { copySelectedPath(homeRelative: false) }
+        case Selector(("copyHomeRelativePath:")):
+            copySelectedPath(homeRelative: true)
         case Selector(("openWith:")):
-            openSelectionWithChosenApp()
+            enterOpenWith()
         case #selector(NSText.paste(_:)):
             editor.paste(nil)
         case #selector(NSText.selectAll(_:)):
@@ -340,6 +352,15 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     @objc private func activateSelection() {
         guard let listing, let row = row(at: tableView.selectedRow) else { return }
+        if case .openWith(let target, _, _, let apps) = mode {
+            guard case .entry(let i) = row else { return }
+            let appURL = URL(fileURLWithPath: apps.path(at: i))
+            exitOpenWith()
+            hide()
+            NSWorkspace.shared.open([URL(fileURLWithPath: target)], withApplicationAt: appURL,
+                                    configuration: NSWorkspace.OpenConfiguration())
+            return
+        }
         switch row {
         case .entry(let i):
             let path = listing.fullPath(at: i)
@@ -384,39 +405,61 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         navigate(to: url.deletingLastPathComponent().path, selecting: url.lastPathComponent)
     }
 
-    private func copySelectedPath() {
+    private func copySelectedPath(homeRelative: Bool) {
         guard let path = selectedPath else { return }
+        let text = homeRelative ? displayPath(path) : path
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(path, forType: .string)
-        setStatus("Copied")
+        pb.setString(text, forType: .string)
+        setStatus("Copied \(text)")
     }
 
-    private func openSelectionWithChosenApp() {
-        guard let path = selectedPath else { return }
-        let open = NSOpenPanel()
-        open.title = "Open \(URL(fileURLWithPath: path).lastPathComponent) with…"
-        open.directoryURL = URL(fileURLWithPath: "/Applications")
-        open.allowedContentTypes = [.application]
-        open.canChooseDirectories = false
-        open.allowsMultipleSelection = false
-        open.level = .modalPanel
-        suppressHideOnResign = true
-        open.begin { [weak self] response in
-            guard let self else { return }
-            self.suppressHideOnResign = false
-            guard response == .OK, let appURL = open.url else {
-                self.panel.makeKeyAndOrderFront(nil)
-                self.panel.makeFirstResponder(self.searchField)
-                return
+    private func enterOpenWith() {
+        guard case .browse = mode, let browse = listing, let path = selectedPath else { return }
+        let browseRow = tableView.selectedRow
+        setStatus("Scanning applications…")
+        workQueue.async { [weak self] in
+            let apps = ApplicationList.scan()
+            DispatchQueue.main.async {
+                guard let self, case .browse = self.mode, self.listing === browse else { return }
+                self.mode = .openWith(target: path, browse: browse, browseRow: browseRow, apps: apps)
+                self.listing = apps.listing
+                self.pathLabel.stringValue = "Open “\(URL(fileURLWithPath: path).lastPathComponent)” with"
+                self.searchField.placeholderString = "Search applications"
+                self.hintsLabel.stringValue = Self.openWithHints
+                self.clearQuery()
+                self.tableView.reloadData()
+                if self.rowCount > 0 { self.selectRow(0) }
+                self.setStatus("\(apps.listing.count) apps")
             }
-            self.hide()
-            NSWorkspace.shared.open([URL(fileURLWithPath: path)], withApplicationAt: appURL,
-                                    configuration: NSWorkspace.OpenConfiguration())
         }
     }
 
+    private func exitOpenWith() {
+        guard case .openWith(_, let browse, let browseRow, _) = mode else { return }
+        mode = .browse
+        listing = browse
+        pathLabel.stringValue = displayPath(currentPath)
+        searchField.placeholderString = "Search or type a new name"
+        hintsLabel.stringValue = Self.hints
+        clearQuery()
+        tableView.reloadData()
+        if rowCount > 0 { selectRow(min(max(browseRow, 0), rowCount - 1)) }
+        setStatus(stats)
+    }
+
     // MARK: - Table
+
+    private func icon(forEntry i: Int, in listing: DirectoryListing) -> NSImage {
+        if case .openWith(_, _, _, let apps) = mode {
+            let path = apps.path(at: i)
+            if let cached = appIcons[path] { return cached }
+            let image = NSWorkspace.shared.icon(forFile: path)
+            appIcons[path] = image
+            return image
+        }
+        return listing.isDirectory(at: i) ? folderIcon : listing.isSymlink(at: i) ? linkIcon : fileIcon
+    }
 
     func numberOfRows(in tableView: NSTableView) -> Int { rowCount }
 
@@ -434,8 +477,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             ?? { let c = FileCellView(frame: NSRect(x: 0, y: 0, width: tableView.bounds.width, height: tableView.rowHeight)); c.identifier = FileCellView.identifier; return c }()
         switch row {
         case .entry(let i):
-            let image = listing.isDirectory(at: i) ? folderIcon : listing.isSymlink(at: i) ? linkIcon : fileIcon
-            cell.configure(name: listing.name(at: i), image: image)
+            cell.configure(name: listing.name(at: i), image: icon(forEntry: i, in: listing))
         case .createFolder:
             cell.configure(name: "Create folder “\(query)”", image: newFolderIcon, secondary: true)
         case .createFile:

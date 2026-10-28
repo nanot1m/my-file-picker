@@ -5,7 +5,7 @@ final class DirectoryListing {
     let path: String
     private let dir: UnsafeMutablePointer<fse_dir>
 
-    private init(path: String, dir: UnsafeMutablePointer<fse_dir>) {
+    init(path: String, dir: UnsafeMutablePointer<fse_dir>) {
         self.path = path
         self.dir = dir
     }
@@ -92,5 +92,42 @@ final class DirectoryLoader {
             }
         }
         return gen
+    }
+}
+
+struct ApplicationList {
+    static let searchRoots = [
+        "/Applications", "/Applications/Utilities",
+        "/System/Applications", "/System/Applications/Utilities",
+        NSHomeDirectory() + "/Applications",
+    ]
+
+    let listing: DirectoryListing
+    private let paths: [String]
+
+    func path(at index: Int) -> String { paths[index] }
+
+    /// Blocking; run off the main thread.
+    static func scan() -> ApplicationList {
+        var named: [(name: String, path: String)] = []
+        var opts = fse_options(include_hidden: 0)
+        for root in searchRoots {
+            var err: Int32 = 0
+            guard let d = fse_dir_read(root, &opts, &err) else { continue }
+            defer { fse_dir_free(d) }
+            for i in 0..<Int(d.pointee.count) where d.pointee.entries[i].flags & UInt16(FSE_DIR | FSE_SYMLINK) != 0 {
+                let name = String(cString: fse_entry_name(d, UInt32(i)))
+                guard name.hasSuffix(".app") else { continue }
+                named.append((String(name.dropLast(4)), root + "/" + name))
+            }
+        }
+        named.sort { fse_name_compare($0.name, $1.name) < 0 }
+        let dir = fse_dir_new()!
+        var paths: [String] = []
+        paths.reserveCapacity(named.count)
+        for item in named where fse_dir_append(dir, item.name, 0) == 0 {
+            paths.append(item.path)
+        }
+        return ApplicationList(listing: DirectoryListing(path: "", dir: dir), paths: paths)
     }
 }

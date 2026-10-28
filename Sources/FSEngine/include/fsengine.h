@@ -42,6 +42,11 @@ typedef struct {
 fse_dir *fse_dir_read(const char *path, const fse_options *opts, int *err);
 void fse_dir_free(fse_dir *d);
 
+/* Build a listing by hand (e.g. an application list) so it can be filtered like a directory. */
+fse_dir *fse_dir_new(void);
+int fse_dir_append(fse_dir *d, const char *name, uint16_t flags); /* returns errno */
+void fse_dir_sort(fse_dir *d);
+
 static inline const char *fse_entry_name(const fse_dir *d, uint32_t i) {
     return d->arena + d->entries[i].name_off;
 }

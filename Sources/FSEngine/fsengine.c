@@ -195,6 +195,20 @@ fse_dir *fse_dir_read(const char *path, const fse_options *opts, int *err) {
     return d;
 }
 
+fse_dir *fse_dir_new(void) {
+    return calloc(1, sizeof(fse_dir));
+}
+
+int fse_dir_append(fse_dir *d, const char *name, uint16_t flags) {
+    size_t len = strlen(name);
+    if (len == 0 || len > UINT16_MAX) return EINVAL;
+    return push(d, name, (uint32_t)len, flags, 0, 0);
+}
+
+void fse_dir_sort(fse_dir *d) {
+    if (d->count > 1) qsort_r(d->entries, d->count, sizeof *d->entries, d, compare_entries);
+}
+
 void fse_dir_free(fse_dir *d) {
     if (!d) return;
     free(d->entries);
