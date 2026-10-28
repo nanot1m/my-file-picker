@@ -12,7 +12,7 @@ enum Pins {
     static let favoritesKey = "favorites"
     static let recentsKey = "recents"
     static let showKey = "showPins"
-    static let maxRecents = 6
+    static let maxRecents = 5
     static let keptRecents = 20
 
     static var favorites: [String] {
@@ -39,6 +39,7 @@ enum Pins {
     }
 
     static func recordVisit(_ path: String) {
+        guard path != NSHomeDirectory() else { return }
         var list = recents.filter { $0 != path }
         list.insert(path, at: 0)
         recents = list
@@ -51,11 +52,11 @@ enum Pins {
         favorites = favorites.filter { $0 != path }
     }
 
-    /// Rows to show above a folder's contents: favorites, then recents not already favorited.
+    /// Start-page rows shown only in the home folder: favorites, then recents not already favorited.
     static func rows(excluding current: String) -> [Pinned] {
-        guard enabled else { return [] }
-        let favs = favorites.filter { $0 != current }
-        let recent = recents.filter { $0 != current && !favorites.contains($0) }.prefix(maxRecents)
+        guard enabled, current == NSHomeDirectory() else { return [] }
+        let favs = favorites
+        let recent = recents.filter { !favorites.contains($0) && $0 != current }.prefix(maxRecents)
         return favs.map { Pinned(path: $0, isFavorite: true) } + recent.map { Pinned(path: $0, isFavorite: false) }
     }
 }

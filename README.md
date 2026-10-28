@@ -8,7 +8,7 @@ Native AppKit UI on top of a small C filesystem engine. No Electron, no web view
 - Create a folder or file by typing a name that doesn't exist yet
 - Open with any application, picked with the same fuzzy search
 - Copy absolute or `~/`-relative paths
-- Menu-bar agent, no Dock icon, one reusable floating panel
+- Menu-bar agent, no Dock icon, one reusable floating panel that always opens on a home start page with your favorites and recent folders
 - Directory enumeration via `getattrlistbulk()`, off the main thread, ~40 bytes per entry
 
 ## Install
@@ -37,7 +37,7 @@ make run
 | → or Enter | Enter the selected folder |
 | Enter | Open the selected file with its default app |
 | ⌘ Enter | Actions for the selected item, fuzzy-searchable in the same panel |
-| pinned rows | Favorites and recent folders are pinned above the folder contents (star and clock icons); typing filters them too. Add or remove favorites and clear recents from the ⌘ Enter actions list, or in Settings |
+| start page | The panel always opens in your home folder, with favorites (★) and recent folders (🕒) listed above its contents. Typing filters them too. Add or remove favorites and clear recents from the ⌘ Enter actions list, or in Settings |
 | ⌘S / Tab | Selection mode: Enter marks the current row, Tab marks and moves on, ⇧Tab moves back, ⌘A marks all, Esc leaves. ⌘ Enter then runs an action on every marked item (Open, Open With, Reveal, Duplicate, Copy, Paste into app, Copy paths, Trash) |
 | ⌘P | Toggle a preview column: Quick Look for files, a contents listing for folders (persists) |
 | ← | Go to the parent folder (when the search field is empty) |

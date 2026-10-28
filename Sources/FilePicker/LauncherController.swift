@@ -3,7 +3,6 @@ import FSEngine
 import Quartz
 
 final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
-    private static let lastDirectoryKey = "lastDirectory"
     private static let listSize = NSSize(width: 680, height: 460)
     private static let previewWidth: CGFloat = 300
     private static let previewKey = "previewEnabled"
@@ -97,7 +96,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var iconCache: [String: NSImage] = [:]
 
     override init() {
-        currentPath = UserDefaults.standard.string(forKey: Self.lastDirectoryKey) ?? NSHomeDirectory()
+        currentPath = NSHomeDirectory()
         super.init()
         NotificationCenter.default.addObserver(self, selector: #selector(pinsChanged), name: Pins.changed, object: nil)
     }
@@ -160,8 +159,17 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(searchField)
         NSApp.activate(ignoringOtherApps: true)
+        returnToStart()
         if tableView.selectedRow < 0, rowCount > 0 { selectRow(0) }
         Perf.report("launcher.show", since: t0)
+    }
+
+    /// The panel always opens on the home start page, with any picker, search, or marks dismissed.
+    private func returnToStart() {
+        if case .browse = mode {} else { leaveMode() }
+        if currentPath != NSHomeDirectory() || !query.isEmpty || selectionMode {
+            navigate(to: NSHomeDirectory())
+        }
     }
 
     private func hide() {
@@ -396,7 +404,6 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             case .success(let listing):
                 self.listing = listing
                 self.currentPath = path
-                UserDefaults.standard.set(path, forKey: Self.lastDirectoryKey)
                 self.pathLabel.stringValue = self.displayPath(path)
                 self.stats = String(format: "%d items · %.2f ms", listing.count, listing.readMilliseconds + listing.sortMilliseconds)
                 self.setStatus(self.stats)
@@ -407,7 +414,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                 Pins.recordVisit(path)
                 self.refreshPins()
                 self.tableView.reloadData()
-                let row = self.pinned.count + (name.flatMap { listing.index(ofName: $0) } ?? 0)
+                let row = name.flatMap { listing.index(ofName: $0) }.map { $0 + self.pinned.count } ?? 0
                 if self.rowCount > 0 { self.selectRow(min(row, self.rowCount - 1)) }
                 Perf.report("navigate", since: t0)
             case .failure(let error):
@@ -455,7 +462,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             matches = nil
             showCreateRows = false
             tableView.reloadData()
-            if rowCount > 0 { selectRow(min(pinned.count, rowCount - 1)) }
+            if rowCount > 0 { selectRow(0) }
             return
         }
         let q = query
