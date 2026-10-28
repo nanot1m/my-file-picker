@@ -12,8 +12,14 @@ enum Pins {
     static let favoritesKey = "favorites"
     static let recentsKey = "recents"
     static let showKey = "showPins"
-    static let maxRecents = 5
-    static let keptRecents = 20
+    static let maxRecentsKey = "maxRecents"
+    static let keptRecents = 50
+
+    /// How many recent folders the start page shows; 0 hides recents entirely.
+    static var maxRecents: Int {
+        get { UserDefaults.standard.object(forKey: maxRecentsKey) as? Int ?? 5 }
+        set { UserDefaults.standard.set(max(0, min(newValue, 30)), forKey: maxRecentsKey); NotificationCenter.default.post(name: changed, object: nil) }
+    }
 
     static var favorites: [String] {
         get { UserDefaults.standard.stringArray(forKey: favoritesKey) ?? [] }
