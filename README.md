@@ -15,12 +15,7 @@ Native AppKit UI on top of a small C filesystem engine. No Electron, no web view
 
 Requires macOS 13+ on Apple Silicon.
 
-**Download.** Grab `FilePicker-<version>.zip` from the [latest release](https://github.com/nanot1m/my-file-picker/releases/latest), unzip, and move `FilePicker.app` to `/Applications`. The app is ad-hoc signed, not notarized, so the first launch needs the quarantine flag cleared:
-
-```
-xattr -dr com.apple.quarantine /Applications/FilePicker.app
-open /Applications/FilePicker.app
-```
+**Download.** Grab `FilePicker-<version>.zip` from the [latest release](https://github.com/nanot1m/my-file-picker/releases/latest), unzip, and move `FilePicker.app` to `/Applications`. Releases are Developer ID signed and notarized, so the app opens without warnings. It lives in the menu bar; add it to Login Items if you want it at startup. Updates install themselves (configurable in Settings).
 
 **Build from source.** Needs the Xcode Command Line Tools (`xcode-select --install`). Xcode itself is not needed.
 

@@ -63,6 +63,11 @@
   tr:first-child td { border-top: 0; }
   td:first-child { width: 160px; white-space: nowrap; }
   pre { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; overflow: auto; font-size: 13px; }
+  .steps { padding-left: 22px; }
+  .steps li { margin: 0 0 10px; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin-top: 12px; }
+  details summary { cursor: pointer; font-weight: 600; }
+  details pre { margin-bottom: 0; }
   footer { padding: 64px 0 40px; text-align: center; color: var(--muted); font-size: 13px; }
 </style>
 </head>
@@ -74,7 +79,7 @@
     <p class="tag">A keyboard-first, Spotlight-style file navigator for macOS. Press <kbd>⌥ Space</kbd>, type a few letters, hit <kbd>↵</kbd>.</p>
     <a class="btn" href="https://github.com/nanot1m/my-file-picker/releases/latest">Download for macOS</a>
     <a class="btn alt" href="https://github.com/nanot1m/my-file-picker">View on GitHub</a>
-    <p class="fine">macOS 13+, Apple Silicon. Free and open source, MIT.</p>
+    <p class="fine">macOS 13+, Apple Silicon. Signed and notarized. Free and open source, MIT.</p>
 
     <div class="panel" aria-hidden="true">
       <div class="path">~/dev</div>
@@ -121,13 +126,21 @@
 
   <section>
     <h2>Install</h2>
-    <p>Download the zip from the <a href="https://github.com/nanot1m/my-file-picker/releases/latest">latest release</a>, unzip, move <code>FilePicker.app</code> to Applications. The app is not notarized yet, so clear the quarantine flag on first launch:</p>
-    <pre>xattr -dr com.apple.quarantine /Applications/FilePicker.app
-open /Applications/FilePicker.app</pre>
-    <p>Or build from source with the Xcode Command Line Tools:</p>
-    <pre>git clone https://github.com/nanot1m/my-file-picker.git
+    <ol class="steps">
+      <li><a href="https://github.com/nanot1m/my-file-picker/releases/latest">Download the latest release</a> and unzip it. The app is signed with a Developer ID and notarized by Apple, so it opens without warnings.</li>
+      <li>Move <code>FilePicker.app</code> to your Applications folder and open it. A folder icon appears in the menu bar; there is no Dock icon.</li>
+      <li>Press <kbd>⌥ Space</kbd>. The first time you enter Desktop, Documents or Downloads, macOS asks for access to that folder once.</li>
+      <li>Optional: for <kbd>⌘ ⇧ V</kbd> "Paste into app", open Settings (<kbd>⌘ ,</kbd>) and click Grant next to Accessibility.</li>
+      <li>Optional: to start at login, add File Picker under System Settings, General, Login Items.</li>
+    </ol>
+    <p>Updates are automatic. The app checks GitHub Releases every few hours, verifies the new build's signature, and swaps itself in place. Turn that off in Settings if you prefer to be asked first.</p>
+    <details>
+      <summary>Build from source</summary>
+      <p>Needs the Xcode Command Line Tools (<code>xcode-select --install</code>); Xcode itself is not required.</p>
+      <pre>git clone https://github.com/nanot1m/my-file-picker.git
 cd my-file-picker &amp;&amp; make run</pre>
-    <p class="fine">No Full Disk Access needed. "Paste into app" asks for Accessibility once, from Settings.</p>
+      <p>Local builds are ad-hoc signed unless you create a self-signed <code>Local Dev</code> code-signing certificate in Keychain Access; the Makefile picks it up and macOS then remembers folder permissions across rebuilds.</p>
+    </details>
   </section>
 
   <footer>MIT License · <a href="https://github.com/nanot1m/my-file-picker">github.com/nanot1m/my-file-picker</a></footer>
