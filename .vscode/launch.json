@@ -1,0 +1,44 @@
+{
+   "configurations": [
+      {
+         "type": "swift",
+         "request": "launch",
+         "args": [],
+         "cwd": "${workspaceFolder:my-file-picker}",
+         "name": "Debug fsbench",
+         "target": "fsbench",
+         "configuration": "debug",
+         "preLaunchTask": "swift: Build Debug fsbench"
+      },
+      {
+         "type": "swift",
+         "request": "launch",
+         "args": [],
+         "cwd": "${workspaceFolder:my-file-picker}",
+         "name": "Release fsbench",
+         "target": "fsbench",
+         "configuration": "release",
+         "preLaunchTask": "swift: Build Release fsbench"
+      },
+      {
+         "type": "swift",
+         "request": "launch",
+         "args": [],
+         "cwd": "${workspaceFolder:my-file-picker}",
+         "name": "Debug FilePicker",
+         "target": "FilePicker",
+         "configuration": "debug",
+         "preLaunchTask": "swift: Build Debug FilePicker"
+      },
+      {
+         "type": "swift",
+         "request": "launch",
+         "args": [],
+         "cwd": "${workspaceFolder:my-file-picker}",
+         "name": "Release FilePicker",
+         "target": "FilePicker",
+         "configuration": "release",
+         "preLaunchTask": "swift: Build Release FilePicker"
+      }
+   ]
+}

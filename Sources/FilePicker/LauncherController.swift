@@ -114,6 +114,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.documentView = tableView
+        column.width = scrollView.contentSize.width
+        tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+        tableView.sizeLastColumnToFit()
         effect.addSubview(scrollView)
     }
 
@@ -243,7 +246,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard let listing else { return nil }
         let cell = tableView.makeView(withIdentifier: FileCellView.identifier, owner: nil) as? FileCellView
-            ?? { let c = FileCellView(frame: .zero); c.identifier = FileCellView.identifier; return c }()
+            ?? { let c = FileCellView(frame: NSRect(x: 0, y: 0, width: tableView.bounds.width, height: tableView.rowHeight)); c.identifier = FileCellView.identifier; return c }()
         let image = listing.isDirectory(at: row) ? folderIcon : listing.isSymlink(at: row) ? linkIcon : fileIcon
         cell.configure(name: listing.name(at: row), image: image)
         return cell

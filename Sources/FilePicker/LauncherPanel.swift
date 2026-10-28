@@ -61,9 +61,14 @@ final class FileCellView: NSTableCellView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        autoresizesSubviews = true
         icon.imageScaling = .scaleProportionallyDown
+        icon.frame = NSRect(x: 10, y: (frame.height - 18) / 2, width: 18, height: 18)
+        icon.autoresizingMask = [.maxXMargin, .minYMargin, .maxYMargin]
         label.lineBreakMode = .byTruncatingMiddle
         label.font = .systemFont(ofSize: 13)
+        label.frame = NSRect(x: 36, y: (frame.height - 17) / 2, width: frame.width - 46, height: 17)
+        label.autoresizingMask = [.width, .minYMargin, .maxYMargin]
         addSubview(icon)
         addSubview(label)
         imageView = icon
@@ -71,17 +76,6 @@ final class FileCellView: NSTableCellView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
-
-    override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(newSize)
-        layoutSubviews()
-    }
-
-    private func layoutSubviews() {
-        let h = bounds.height
-        icon.frame = NSRect(x: 10, y: (h - 18) / 2, width: 18, height: 18)
-        label.frame = NSRect(x: 36, y: (h - 17) / 2, width: bounds.width - 46, height: 17)
-    }
 
     func configure(name: String, image: NSImage) {
         label.stringValue = name
