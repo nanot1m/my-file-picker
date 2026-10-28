@@ -4,7 +4,7 @@ import FSEngine
 final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     private static let lastDirectoryKey = "lastDirectory"
     private static let panelSize = NSSize(width: 680, height: 460)
-    private static let browseHints = "↵ open   ⌘↵ actions   ← back   ⌘C path   ⌘⇧C ~path   ⌘R rename   ⌘⌫ trash   esc"
+    private static let browseHints = "↵ open   ⌘↵ actions   ← back   ⌘C path   ⌘⇧V paste into app   ⌘R rename   ⌘⌫ trash   esc"
     private static let browsePlaceholder = "Search or type a new name"
 
     private enum Row {
@@ -57,6 +57,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var listing: DirectoryListing?
     private var mode: Mode = .browse
     private var currentPath: String
+    private var previousApp: NSRunningApplication?
     private var includeHidden = false
 
     private var query = ""
@@ -93,6 +94,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main ?? NSScreen.screens[0]
         let frame = screen.visibleFrame
+        if let front = NSWorkspace.shared.frontmostApplication, front != NSRunningApplication.current {
+            previousApp = front
+        }
         panel.setFrameOrigin(NSPoint(x: frame.midX - Self.panelSize.width / 2,
                                      y: frame.midY - Self.panelSize.height / 2 + frame.height * 0.12))
         panel.makeKeyAndOrderFront(nil)
@@ -381,6 +385,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             if let path = selectedBrowsePath { trash(path) }
         case Selector(("duplicateSelection:")):
             if let path = selectedBrowsePath { duplicate(path) }
+        case Selector(("pasteIntoPreviousApp:")):
+            if let path = selectedBrowsePath { pasteIntoPreviousApp(path) }
         case #selector(NSText.paste(_:)):
             let urls = FileOperations.pasteboardFileURLs()
             if case .browse = mode, !urls.isEmpty { pasteFiles(urls) } else { editor.paste(nil) }
@@ -482,6 +488,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             Action(title: "Duplicate", symbol: "plus.square.on.square") { [weak self] in self?.duplicate(path) },
             Action(title: "Copy", symbol: "doc.on.doc") { [weak self] in
                 FileOperations.copyToPasteboard(path); self?.setStatus("Copied \(name)")
+            },
+            Action(title: "Paste into \(previousApp?.localizedName ?? "previous app")", symbol: "arrow.up.doc.on.clipboard") { [weak self] in
+                self?.pasteIntoPreviousApp(path)
             },
             Action(title: "Paste Here", symbol: "doc.on.clipboard") { [weak self] in
                 self?.pasteFiles(FileOperations.pasteboardFileURLs())
@@ -605,6 +614,16 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         guard !urls.isEmpty else { setStatus("Clipboard has no files"); return }
         let dir = currentPath
         run("Paste") { try FileOperations.paste(urls, into: dir) }
+    }
+
+    private func pasteIntoPreviousApp(_ path: String) {
+        FileOperations.copyToPasteboard(path)
+        hide()
+        guard let app = previousApp, !app.isTerminated else { return }
+        app.activate()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            FileOperations.sendPasteKeystroke()
+        }
     }
 
     private func copySelectedPath(homeRelative: Bool, path explicit: String? = nil) {

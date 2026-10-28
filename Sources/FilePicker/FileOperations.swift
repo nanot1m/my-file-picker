@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 
 enum FileOperations {
     static func trash(_ path: String) throws {
@@ -58,6 +59,20 @@ enum FileOperations {
             if first == nil { first = dest.lastPathComponent }
         }
         return first
+    }
+
+    /// Sends ⌘V to the frontmost app. Returns false when Accessibility access is missing (and prompts for it).
+    @discardableResult
+    static func sendPasteKeystroke() -> Bool {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        guard AXIsProcessTrustedWithOptions(options) else { return false }
+        let source = CGEventSource(stateID: .combinedSessionState)
+        for down in [true, false] {
+            guard let event = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: down) else { continue }
+            event.flags = .maskCommand
+            event.post(tap: .cghidEventTap)
+        }
+        return true
     }
 
     static func revealInFinder(_ path: String) {
