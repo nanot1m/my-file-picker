@@ -1,10 +1,13 @@
 import AppKit
 import FSEngine
+import Quartz
 
 final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     private static let lastDirectoryKey = "lastDirectory"
-    private static let panelSize = NSSize(width: 680, height: 460)
-    private static let browseHints = "↵ open   ⌘↵ actions   ← back   ⌘C path   ⌘⇧V paste into app   ⌘R rename   ⌘⌫ trash   esc"
+    private static let listSize = NSSize(width: 680, height: 460)
+    private static let previewWidth: CGFloat = 400
+    private static let previewKey = "previewEnabled"
+    private static let browseHints = "↵ open   ⌘↵ actions   ← back   ⌘P preview   ⌘C path   ⌘⇧V paste into app   ⌘R rename   ⌘⌫ trash   esc"
     private static let browsePlaceholder = "Search or type a new name"
 
     private enum Row {
@@ -51,6 +54,10 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private let statusLabel = NSTextField(labelWithString: "")
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
+    private let previewSeparator = NSBox()
+    private let previewView = QLPreviewView(frame: .zero, style: .normal)!
+    private var previewEnabled = UserDefaults.standard.bool(forKey: previewKey)
+    private var previewUpdate: DispatchWorkItem?
 
     private let loader = DirectoryLoader()
     private let workQueue = DispatchQueue(label: "com.hazam.filepicker.work", qos: .userInteractive)
@@ -97,8 +104,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         if let front = NSWorkspace.shared.frontmostApplication, front != NSRunningApplication.current {
             previousApp = front
         }
-        panel.setFrameOrigin(NSPoint(x: frame.midX - Self.panelSize.width / 2,
-                                     y: frame.midY - Self.panelSize.height / 2 + frame.height * 0.12))
+        let size = panelSize
+        panel.setFrameOrigin(NSPoint(x: frame.midX - size.width / 2,
+                                     y: frame.midY - size.height / 2 + frame.height * 0.12))
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(searchField)
         NSApp.activate(ignoringOtherApps: true)
@@ -119,12 +127,12 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     // MARK: - UI construction
 
     private func buildPanel() {
-        panel = LauncherPanel(contentRect: NSRect(origin: .zero, size: Self.panelSize))
+        panel = LauncherPanel(contentRect: NSRect(origin: .zero, size: Self.listSize))
         panel.delegate = self
         panel.onCommand = { [weak self] selector in self?.handleCommand(selector) ?? false }
 
-        let w = Self.panelSize.width, h = Self.panelSize.height
-        let effect = NSVisualEffectView(frame: NSRect(origin: .zero, size: Self.panelSize))
+        let w = Self.listSize.width, h = Self.listSize.height
+        let effect = NSVisualEffectView(frame: NSRect(origin: .zero, size: Self.listSize))
         effect.material = .popover
         effect.blendingMode = .behindWindow
         effect.state = .active
@@ -136,7 +144,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         pathLabel.font = .systemFont(ofSize: 11, weight: .medium)
         pathLabel.textColor = .secondaryLabelColor
         pathLabel.lineBreakMode = .byTruncatingHead
-        pathLabel.autoresizingMask = [.width, .minYMargin]
+        pathLabel.autoresizingMask = [.minYMargin]
         effect.addSubview(pathLabel)
 
         searchField.frame = NSRect(x: 14, y: h - 62, width: w - 28, height: 30)
@@ -148,21 +156,33 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         searchField.cell?.isScrollable = true
         searchField.cell?.wraps = false
         searchField.delegate = self
-        searchField.autoresizingMask = [.width, .minYMargin]
+        searchField.autoresizingMask = [.minYMargin]
         effect.addSubview(searchField)
 
         for y in [h - 70, 30] {
             let separator = NSBox(frame: NSRect(x: 0, y: y, width: w, height: 1))
             separator.boxType = .separator
-            separator.autoresizingMask = [.width, y > 100 ? .minYMargin : .maxYMargin]
+            separator.autoresizingMask = [y > 100 ? .minYMargin : .maxYMargin]
             effect.addSubview(separator)
         }
+
+        previewSeparator.boxType = .separator
+        previewSeparator.frame = NSRect(x: w, y: 0, width: 1, height: h)
+        previewSeparator.autoresizingMask = [.height]
+        effect.addSubview(previewSeparator)
+
+        previewView.frame = NSRect(x: w + 1, y: 0, width: Self.previewWidth - 1, height: h)
+        previewView.autoresizingMask = [.height]
+        previewView.autostarts = true
+        previewView.shouldCloseWithWindow = false
+        effect.addSubview(previewView)
+        applyPreviewLayout()
 
         hintsLabel.frame = NSRect(x: 16, y: 8, width: w * 0.78, height: 16)
         hintsLabel.font = .systemFont(ofSize: 11)
         hintsLabel.textColor = .secondaryLabelColor
         hintsLabel.lineBreakMode = .byTruncatingTail
-        hintsLabel.autoresizingMask = [.width, .maxYMargin]
+        hintsLabel.autoresizingMask = [.maxYMargin]
         effect.addSubview(hintsLabel)
 
         statusLabel.frame = NSRect(x: w * 0.78 + 16, y: 8, width: w * 0.22 - 32, height: 16)
@@ -170,7 +190,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         statusLabel.textColor = .tertiaryLabelColor
         statusLabel.alignment = .right
         statusLabel.lineBreakMode = .byTruncatingMiddle
-        statusLabel.autoresizingMask = [.width, .maxYMargin, .minXMargin]
+        statusLabel.autoresizingMask = [.maxYMargin]
         effect.addSubview(statusLabel)
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
@@ -193,7 +213,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         tableView.doubleAction = #selector(activateSelection)
 
         scrollView.frame = NSRect(x: 0, y: 31, width: w, height: h - 101)
-        scrollView.autoresizingMask = [.width, .height]
+        scrollView.autoresizingMask = [.height]
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.documentView = tableView
@@ -201,6 +221,45 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         tableView.sizeLastColumnToFit()
         effect.addSubview(scrollView)
+    }
+
+    // MARK: - Preview
+
+    private var panelSize: NSSize {
+        NSSize(width: Self.listSize.width + (previewEnabled ? Self.previewWidth : 0), height: Self.listSize.height)
+    }
+
+    private func applyPreviewLayout() {
+        previewSeparator.isHidden = !previewEnabled
+        previewView.isHidden = !previewEnabled
+        let origin = panel.frame.origin
+        let size = panelSize
+        panel.setFrame(NSRect(x: origin.x, y: origin.y, width: size.width, height: size.height), display: true)
+        if previewEnabled { schedulePreviewUpdate(delay: 0) } else { previewView.previewItem = nil }
+    }
+
+    private func togglePreview() {
+        previewEnabled.toggle()
+        UserDefaults.standard.set(previewEnabled, forKey: Self.previewKey)
+        applyPreviewLayout()
+    }
+
+    private func schedulePreviewUpdate(delay: TimeInterval = 0.08) {
+        previewUpdate?.cancel()
+        guard previewEnabled else { return }
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let url = self.selectedBrowsePath.map { URL(fileURLWithPath: $0) }
+            if (self.previewView.previewItem as? URL) != url {
+                self.previewView.previewItem = url as QLPreviewItem?
+            }
+        }
+        previewUpdate = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        schedulePreviewUpdate()
     }
 
     // MARK: - Navigation
@@ -379,6 +438,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             showActions()
         case Selector(("openSettings:")):
             openSettings?()
+        case Selector(("togglePreview:")):
+            togglePreview()
         case Selector(("renameSelection:")):
             if let path = selectedBrowsePath { enterRename(target: path) }
         case Selector(("trashSelection:")):

@@ -9,7 +9,7 @@ let package = Package(
         .executableTarget(
             name: "FilePicker",
             dependencies: ["FSEngine"],
-            linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("Carbon")]
+            linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("Carbon"), .linkedFramework("Quartz")]
         ),
         .executableTarget(name: "fsbench", dependencies: ["FSEngine"]),
         .testTarget(name: "FSEngineTests", dependencies: ["FSEngine"]),
