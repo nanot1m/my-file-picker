@@ -7,7 +7,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private static let listSize = NSSize(width: 680, height: 460)
     private static let previewWidth: CGFloat = 400
     private static let previewKey = "previewEnabled"
-    private static let browseHints = "↵ open   ⌘↵ actions   ← back   ⌘P preview   ⌘C path   ⌘⇧V paste into app   ⌘R rename   ⌘⌫ trash   esc"
+    private static let browseHints = "↵ open  ⌘↵ actions  ⌘P preview  ⌘C path  ⌘⇧V paste into app  ⌘R rename  ⌘⌫ trash  esc"
     private static let browsePlaceholder = "Search or type a new name"
 
     private enum Row {
@@ -178,14 +178,14 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         effect.addSubview(previewView)
         applyPreviewLayout()
 
-        hintsLabel.frame = NSRect(x: 16, y: 8, width: w * 0.78, height: 16)
+        hintsLabel.frame = NSRect(x: 16, y: 8, width: w * 0.80, height: 16)
         hintsLabel.font = .systemFont(ofSize: 11)
         hintsLabel.textColor = .secondaryLabelColor
         hintsLabel.lineBreakMode = .byTruncatingTail
         hintsLabel.autoresizingMask = [.maxYMargin]
         effect.addSubview(hintsLabel)
 
-        statusLabel.frame = NSRect(x: w * 0.78 + 16, y: 8, width: w * 0.22 - 32, height: 16)
+        statusLabel.frame = NSRect(x: w * 0.80 + 8, y: 8, width: w * 0.20 - 24, height: 16)
         statusLabel.font = .systemFont(ofSize: 11)
         statusLabel.textColor = .tertiaryLabelColor
         statusLabel.alignment = .right
@@ -232,9 +232,10 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private func applyPreviewLayout() {
         previewSeparator.isHidden = !previewEnabled
         previewView.isHidden = !previewEnabled
-        let origin = panel.frame.origin
+        let old = panel.frame
         let size = panelSize
-        panel.setFrame(NSRect(x: origin.x, y: origin.y, width: size.width, height: size.height), display: true)
+        let x = panel.isVisible ? old.origin.x - (size.width - old.width) / 2 : old.origin.x
+        panel.setFrame(NSRect(x: x, y: old.origin.y, width: size.width, height: size.height), display: true)
         if previewEnabled { schedulePreviewUpdate(delay: 0) } else { previewView.previewItem = nil }
     }
 

@@ -42,6 +42,7 @@ make run
 | → or Enter | Enter the selected folder |
 | Enter | Open the selected file with its default app |
 | ⌘ Enter | Actions for the selected item, fuzzy-searchable in the same panel |
+| ⌘P | Toggle a Quick Look preview column for the selected item (persists) |
 | ← | Go to the parent folder (when the search field is empty) |
 | ⌘C | Copy the absolute path |
 | ⌘⇧C | Copy the path relative to home, e.g. `~/dev/project` |
