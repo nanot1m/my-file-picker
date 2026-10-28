@@ -34,6 +34,8 @@ The automatic `GITHUB_TOKEN` publishes releases with `contents: write`; no perso
 
 ## Publish after reviewing and merging these changes
 
+Move the entries under `## [Unreleased]` in `CHANGELOG.md` into a new `## [x.y.z] - YYYY-MM-DD` section and add its compare link at the bottom. The workflow refuses to run without a matching section and uses it as the release notes.
+
 Choose a NEW version. The following is an example only; do not reuse an existing release tag:
 
 ```sh
