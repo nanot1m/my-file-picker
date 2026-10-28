@@ -683,6 +683,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             goToParent()
         case #selector(NSResponder.deleteBackward(_:)):
             guard case .browse = mode, query.isEmpty else { return false }
+            if NSApp.currentEvent?.isARepeat == true { return true }
             goToParent()
         default:
             return false
