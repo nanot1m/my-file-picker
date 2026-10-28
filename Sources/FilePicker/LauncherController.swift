@@ -422,7 +422,11 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                     self.pendingQuery = nil
                     self.searchField.stringValue = pending
                     self.query = pending
-                    if pending.contains("/") { self.resolvePathSegment() } else if !pending.isEmpty { self.applyFilter() }
+                    if pending.contains("/") {
+                        self.applyFilter(completion: { [weak self] in self?.resolvePathSegment() })
+                    } else if !pending.isEmpty {
+                        self.applyFilter()
+                    }
                 }
             case .failure(let error):
                 self.pendingQuery = nil
@@ -462,7 +466,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         if case .browse = mode, query.contains("/") { resolvePathSegment() } else { applyFilter() }
     }
 
-    /// "a/b/c": each slash commits the segment before it by descending into the best fuzzy-matched folder.
+    /// "a/b/c": each slash commits the segment before it by descending into the highlighted folder.
     private func resolvePathSegment() {
         guard let slash = query.firstIndex(of: "/") else { applyFilter(); return }
         let head = String(query[..<slash])
@@ -473,10 +477,10 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         case "~": target = NSHomeDirectory()
         case "..": target = currentPath == "/" ? "/" : (currentPath as NSString).deletingLastPathComponent
         case ".": target = currentPath
-        default: target = bestFolderMatch(for: head)
+        default: target = selectedIsFolder ? selectedBrowsePath : nil
         }
         guard let target else {
-            setStatus("No folder matches “\(head)”")
+            setStatus(selectedBrowsePath == nil ? "No folder matches “\(head)”" : "Highlighted item is not a folder")
             applyFilter()
             return
         }
@@ -484,20 +488,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         navigate(to: target)
     }
 
-    private func bestFolderMatch(for segment: String) -> String? {
-        guard let listing else { return nil }
-        let (indices, _) = listing.filter(query: segment)
-        if let i = indices.first(where: { isNavigableDirectory(entry: Int($0)) }) {
-            return listing.fullPath(at: Int(i))
-        }
-        let pinnedMatch = Pins.rows(excluding: currentPath)
-            .map { ($0, fse_fuzzy_score($0.name, segment)) }
-            .filter { $0.1 >= 0 }
-            .max { $0.1 < $1.1 }
-        return pinnedMatch?.0.path
-    }
-
-    private func applyFilter() {
+    private func applyFilter(completion: (() -> Void)? = nil) {
         filterGeneration += 1
         let gen = filterGeneration
         refreshPins()
@@ -506,9 +497,10 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             showCreateRows = false
             tableView.reloadData()
             if rowCount > 0 { selectRow(0) }
+            completion?()
             return
         }
-        let q = query
+        let q = query.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? query
         let t0 = Perf.now()
         workQueue.async { [weak self] in
             let (indices, exact) = listing.filter(query: q)
@@ -520,6 +512,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                 if self.rowCount > 0 { self.selectRow(0) }
                 self.setStatus("\(indices.count) of \(listing.count)")
                 Perf.report("filter", since: t0)
+                completion?()
             }
         }
     }
