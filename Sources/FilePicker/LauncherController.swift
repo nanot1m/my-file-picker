@@ -238,8 +238,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         pathLabel.frame.size.width = listWidth - 32
         searchField.frame.size.width = listWidth - 28
         for separator in horizontalSeparators { separator.frame.size.width = listWidth }
-        hintsLabel.frame.size.width = listWidth * 0.80
-        statusLabel.frame = NSRect(x: listWidth * 0.80 + 8, y: 8, width: listWidth * 0.20 - 24, height: 16)
+        let hintsFraction: CGFloat = previewEnabled ? 0.58 : 0.80
+        hintsLabel.frame.size.width = listWidth * hintsFraction
+        statusLabel.frame = NSRect(x: listWidth * hintsFraction + 8, y: 8, width: listWidth * (1 - hintsFraction) - 24, height: 16)
         if case .browse = mode { hintsLabel.stringValue = browseHints }
         scrollView.frame.size.width = listWidth
         scrollView.tile()
