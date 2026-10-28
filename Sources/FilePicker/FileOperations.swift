@@ -30,10 +30,16 @@ enum FileOperations {
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(EEXIST))
     }
 
-    static func copyToPasteboard(_ path: String) {
+    static func copyToPasteboard(_ paths: [String]) {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.writeObjects([URL(fileURLWithPath: path) as NSURL])
+        pb.writeObjects(paths.map { URL(fileURLWithPath: $0) as NSURL })
+    }
+
+    static func copyToPasteboard(_ path: String) { copyToPasteboard([path]) }
+
+    static func revealInFinder(_ paths: [String]) {
+        NSWorkspace.shared.activateFileViewerSelecting(paths.map { URL(fileURLWithPath: $0) })
     }
 
     static func pasteboardFileURLs() -> [URL] {
@@ -75,9 +81,7 @@ enum FileOperations {
         return true
     }
 
-    static func revealInFinder(_ path: String) {
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
-    }
+    static func revealInFinder(_ path: String) { revealInFinder([path]) }
 
     static func describe(_ error: Error) -> String {
         let ns = error as NSError

@@ -12,7 +12,11 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         Hint(key: "⌘C", label: "copy path"), Hint(key: "⌘⇧V", label: "paste into app"),
         Hint(key: "⌘R", label: "rename"), Hint(key: "esc", label: "close"),
     ]
-    private var browseHints: [Hint] { Self.browseHints }
+    private static let selectionHints: [Hint] = [
+        Hint(key: "⇥", label: "mark"), Hint(key: "⌘A", label: "mark all"), Hint(key: "⌘↵", label: "actions for marked"),
+        Hint(key: "esc", label: "done"),
+    ]
+    private var browseHints: [Hint] { selectionMode ? Self.selectionHints : Self.browseHints }
     private static let browsePlaceholder = "Search or type a new name"
 
     private enum Row {
@@ -73,6 +77,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var includeHidden = false
 
     private var query = ""
+    private var selectionMode = false
+    private var marked = Set<Int>()
     private var filterGeneration: UInt64 = 0
     private var matches: [UInt32]?
     private var showCreateRows = false
@@ -282,6 +288,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                 self.stats = String(format: "%d items · %.2f ms", listing.count, listing.readMilliseconds + listing.sortMilliseconds)
                 self.setStatus(self.stats)
                 self.clearQuery()
+                self.selectionMode = false
+                self.marked = []
+                self.hintsBar.hints = self.browseHints
                 self.tableView.reloadData()
                 let row = name.flatMap { listing.index(ofName: $0) } ?? 0
                 if listing.count > 0 { self.selectRow(row) }
@@ -408,8 +417,12 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             moveSelection(by: visibleRows)
         case #selector(NSResponder.insertNewline(_:)):
             if case .rename(let target, _) = mode { commitRename(target) } else { activateSelection() }
+        case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.insertBacktab(_:)):
+            guard case .browse = mode else { return false }
+            toggleMarkOnSelection(advance: selector == #selector(NSResponder.insertTab(_:)) ? 1 : -1)
         case #selector(NSResponder.cancelOperation(_:)):
             switch mode {
+            case .browse where selectionMode: exitSelectionMode()
             case .browse where !query.isEmpty: clearQuery(); applyFilter()
             case .picker where !query.isEmpty: clearQuery(); applyFilter()
             case .browse: hide()
@@ -441,7 +454,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         case Selector(("openWith:")):
             if let path = selectedBrowsePath { enterOpenWith(target: path) }
         case Selector(("showActions:")):
-            showActions()
+            if selectionMode, !marked.isEmpty { showBatchActions() } else { showActions() }
+        case Selector(("toggleSelectionMode:")):
+            if selectionMode { exitSelectionMode() } else { enterSelectionMode() }
         case Selector(("openSettings:")):
             openSettings?()
         case Selector(("togglePreview:")):
@@ -456,7 +471,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             let urls = FileOperations.pasteboardFileURLs()
             if case .browse = mode, !urls.isEmpty { pasteFiles(urls) } else { editor.paste(nil) }
         case #selector(NSText.selectAll(_:)):
-            editor.selectAll(nil)
+            if selectionMode { markAllVisible() } else { editor.selectAll(nil) }
         case #selector(NSText.cut(_:)):
             editor.cut(nil)
         default:
@@ -538,6 +553,108 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         setStatus(saved.query.isEmpty ? stats : "\(saved.matches?.count ?? 0) of \(saved.listing.count)")
     }
 
+    // MARK: - Selection mode
+
+    private func enterSelectionMode() {
+        guard case .browse = mode else { return }
+        selectionMode = true
+        marked = []
+        hintsBar.hints = browseHints
+        reloadVisibleCells()
+        updateSelectionStatus()
+    }
+
+    private func exitSelectionMode() {
+        selectionMode = false
+        marked = []
+        hintsBar.hints = browseHints
+        reloadVisibleCells()
+        setStatus(query.isEmpty ? stats : "\(matches?.count ?? 0) of \(listing?.count ?? 0)")
+    }
+
+    private func toggleMarkOnSelection(advance: Int) {
+        if !selectionMode { enterSelectionMode() }
+        if let i = selectedEntryIndex {
+            if marked.contains(i) { marked.remove(i) } else { marked.insert(i) }
+            tableView.reloadData(forRowIndexes: IndexSet(integer: tableView.selectedRow), columnIndexes: IndexSet(integer: 0))
+        }
+        moveSelection(by: advance)
+        updateSelectionStatus()
+    }
+
+    private func markAllVisible() {
+        for row in 0..<rowCount {
+            if case .entry(let i)? = self.row(at: row) { marked.insert(i) }
+        }
+        reloadVisibleCells()
+        updateSelectionStatus()
+    }
+
+    private func updateSelectionStatus() {
+        setStatus("\(marked.count) selected")
+    }
+
+    private func reloadVisibleCells() {
+        guard rowCount > 0 else { return }
+        tableView.reloadData(forRowIndexes: IndexSet(0..<rowCount), columnIndexes: IndexSet(integer: 0))
+    }
+
+    private var markedPaths: [String] {
+        guard let listing else { return [] }
+        return marked.sorted().map { listing.fullPath(at: $0) }
+    }
+
+    private func showBatchActions() {
+        guard case .browse = mode else { return }
+        let paths = markedPaths
+        let urls = paths.map { URL(fileURLWithPath: $0) }
+        let count = paths.count
+        let actions: [Action] = [
+            Action(title: "Open \(count) items", symbol: "arrow.up.forward.app") { [weak self] in
+                self?.hide(); for url in urls { NSWorkspace.shared.open(url) }
+            },
+            Action(title: "Open With…", symbol: "square.grid.2x2") { [weak self] in self?.enterOpenWith(targets: paths) },
+            Action(title: "Reveal in Finder", symbol: "magnifyingglass") { [weak self] in
+                self?.hide(); FileOperations.revealInFinder(paths)
+            },
+            Action(title: "Duplicate", symbol: "plus.square.on.square") { [weak self] in
+                self?.run("Duplicate") { var first: String?; for p in paths { let n = try FileOperations.duplicate(p); first = first ?? n }; return first }
+            },
+            Action(title: "Copy", symbol: "doc.on.doc") { [weak self] in
+                FileOperations.copyToPasteboard(paths); self?.setStatus("Copied \(count) items")
+            },
+            Action(title: "Paste into \(previousApp?.localizedName ?? "previous app")", symbol: "arrow.up.doc.on.clipboard") { [weak self] in
+                self?.pasteIntoPreviousApp(paths)
+            },
+            Action(title: "Copy Paths", symbol: "link") { [weak self] in self?.copyText(paths.joined(separator: "\n")) },
+            Action(title: "Copy ~ Paths", symbol: "house") { [weak self] in
+                guard let self else { return }
+                self.copyText(paths.map { self.displayPath($0) }.joined(separator: "\n"))
+            },
+            Action(title: "Move \(count) items to Trash", symbol: "trash") { [weak self] in
+                self?.run("Trash") { for p in paths { try FileOperations.trash(p) }; return nil }
+            },
+        ]
+        let icons = actions.map { NSImage(systemSymbolName: $0.symbol, accessibilityDescription: nil) ?? fileIcon }
+        enterPicker(Picker(
+            title: "Actions for \(count) selected items",
+            placeholder: "Search actions",
+            hints: [Hint(key: "↵", label: "run"), Hint(key: "esc", label: "back")],
+            listing: .synthetic(actions.map(\.title)),
+            icon: { icons[$0] },
+            select: { [weak self] i in
+                self?.leaveMode()
+                actions[i].run()
+            }))
+    }
+
+    private func copyText(_ text: String) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        setStatus("Copied")
+    }
+
     private func showActions() {
         guard case .browse = mode, let path = selectedBrowsePath else { return }
         let name = URL(fileURLWithPath: path).lastPathComponent
@@ -577,7 +694,10 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             }))
     }
 
-    private func enterOpenWith(target: String) {
+    private func enterOpenWith(target: String) { enterOpenWith(targets: [target]) }
+
+    private func enterOpenWith(targets: [String]) {
+        let target = targets.first ?? ""
         if case .picker = mode { leaveMode() }
         guard case .browse = mode, let browse = listing else { return }
         setStatus("Scanning applications…")
@@ -586,7 +706,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             DispatchQueue.main.async {
                 guard let self, case .browse = self.mode, self.listing === browse else { return }
                 self.enterPicker(Picker(
-                    title: "Open “\(URL(fileURLWithPath: target).lastPathComponent)” with",
+                    title: targets.count == 1 ? "Open “\(URL(fileURLWithPath: target).lastPathComponent)” with" : "Open \(targets.count) items with",
                     placeholder: "Search applications",
                     hints: [Hint(key: "↵", label: "open with selected app"), Hint(key: "esc", label: "back")],
                     listing: apps.listing,
@@ -594,7 +714,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                     select: { [weak self] i in
                         self?.leaveMode()
                         self?.hide()
-                        NSWorkspace.shared.open([URL(fileURLWithPath: target)], withApplicationAt: URL(fileURLWithPath: apps.path(at: i)),
+                        NSWorkspace.shared.open(targets.map { URL(fileURLWithPath: $0) }, withApplicationAt: URL(fileURLWithPath: apps.path(at: i)),
                                                 configuration: NSWorkspace.OpenConfiguration())
                     }))
             }
@@ -681,8 +801,10 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         run("Paste") { try FileOperations.paste(urls, into: dir) }
     }
 
-    private func pasteIntoPreviousApp(_ path: String) {
-        FileOperations.copyToPasteboard(path)
+    private func pasteIntoPreviousApp(_ path: String) { pasteIntoPreviousApp([path]) }
+
+    private func pasteIntoPreviousApp(_ paths: [String]) {
+        FileOperations.copyToPasteboard(paths)
         hide()
         guard let app = previousApp, !app.isTerminated else { return }
         app.activate()
@@ -730,7 +852,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             ?? { let c = FileCellView(frame: NSRect(x: 0, y: 0, width: tableView.bounds.width, height: tableView.rowHeight)); c.identifier = FileCellView.identifier; return c }()
         switch row {
         case .entry(let i):
-            cell.configure(name: listing.name(at: i), image: icon(forEntry: i, in: listing))
+            let markState: MarkState = selectionMode && { if case .browse = mode { return true } else { return false } }()
+                ? (marked.contains(i) ? .marked : .unmarked) : .hidden
+            cell.configure(name: listing.name(at: i), image: icon(forEntry: i, in: listing), mark: markState)
         case .createFolder:
             cell.configure(name: "Create folder “\(query)”", image: NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: nil)!, secondary: true)
         case .createFile:

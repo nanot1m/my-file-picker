@@ -34,6 +34,7 @@ final class LauncherPanel: NSPanel {
         case (0x0F, [.command]): selector = Selector(("renameSelection:"))
         case (0x02, [.command]): selector = Selector(("duplicateSelection:"))
         case (0x2B, [.command]): selector = Selector(("openSettings:"))
+        case (0x01, [.command]): selector = Selector(("toggleSelectionMode:"))
         case (0x23, [.command]): selector = Selector(("togglePreview:"))
         case (0x09, [.command]): selector = #selector(NSText.paste(_:))
         case (0x09, [.command, .shift]): selector = Selector(("pasteIntoPreviousApp:"))
@@ -60,10 +61,17 @@ enum Masks {
     }
 }
 
+enum MarkState {
+    case hidden, unmarked, marked
+}
+
 final class FileCellView: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("FileCell")
     private let icon = NSImageView()
     private let label = NSTextField(labelWithString: "")
+    private let mark = NSImageView()
+    private static let markedImage = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Selected")
+    private static let unmarkedImage = NSImage(systemSymbolName: "circle", accessibilityDescription: "Not selected")
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -75,18 +83,27 @@ final class FileCellView: NSTableCellView {
         label.font = .systemFont(ofSize: 13)
         label.frame = NSRect(x: 36, y: (frame.height - 17) / 2, width: frame.width - 46, height: 17)
         label.autoresizingMask = [.width, .minYMargin, .maxYMargin]
+        mark.frame = NSRect(x: frame.width - 34, y: (frame.height - 16) / 2, width: 16, height: 16)
+        mark.autoresizingMask = [.minXMargin, .minYMargin, .maxYMargin]
+        mark.imageScaling = .scaleProportionallyDown
+        mark.isHidden = true
         addSubview(icon)
         addSubview(label)
+        addSubview(mark)
         imageView = icon
         textField = label
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func configure(name: String, image: NSImage, secondary: Bool = false) {
+    func configure(name: String, image: NSImage, secondary: Bool = false, mark state: MarkState = .hidden) {
         label.stringValue = name
         label.textColor = secondary ? .secondaryLabelColor : .labelColor
         icon.image = image
+        mark.isHidden = state == .hidden
+        mark.image = state == .marked ? Self.markedImage : Self.unmarkedImage
+        mark.contentTintColor = state == .marked ? .controlAccentColor : .tertiaryLabelColor
+        label.frame.size.width = bounds.width - 46 - (state == .hidden ? 0 : 30)
     }
 }
 
