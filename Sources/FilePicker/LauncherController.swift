@@ -8,7 +8,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private static let previewWidth: CGFloat = 300
     private static let previewKey = "previewEnabled"
     private static let browseHints: [Hint] = [
-        Hint(key: "↵", label: "open"), Hint(key: "⌘↵", label: "actions"), Hint(key: "⌘P", label: "preview"),
+        Hint(key: "↵", label: "open"), Hint(key: "⌘↵", label: "actions"), Hint(key: "⌘↑", label: "up"), Hint(key: "⌘P", label: "preview"),
         Hint(key: "⌘C", label: "copy path"), Hint(key: "⌘⇧V", label: "paste into app"),
         Hint(key: "⌘R", label: "rename"), Hint(key: "esc", label: "close"),
     ]
@@ -421,6 +421,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             navigate(to: listing.fullPath(at: i))
         case #selector(NSResponder.moveLeft(_:)):
             guard case .browse = mode, query.isEmpty else { return false }
+            goToParent()
+        case #selector(NSResponder.moveToBeginningOfDocument(_:)):
+            guard case .browse = mode else { return false }
             goToParent()
         default:
             return false
