@@ -25,8 +25,14 @@ final class LauncherPanel: NSPanel {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let selector: Selector?
+        if event.keyCode == 0x24 || event.keyCode == 0x4C, mods == [.command] {
+            return onCommand?(Selector(("showActions:"))) ?? false
+        }
         switch (event.charactersIgnoringModifiers?.lowercased(), mods) {
         case ("c", [.command]): selector = #selector(NSText.copy(_:))
+        case ("r", [.command]): selector = Selector(("renameSelection:"))
+        case ("\u{7f}", [.command]): selector = Selector(("trashSelection:"))
+        case ("d", [.command]): selector = Selector(("duplicateSelection:"))
         case ("c", [.command, .shift]): selector = Selector(("copyHomeRelativePath:"))
         case ("o", [.command, .shift]): selector = Selector(("openWith:"))
         case ("v", [.command]): selector = #selector(NSText.paste(_:))

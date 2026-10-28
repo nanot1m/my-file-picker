@@ -41,11 +41,18 @@ make run
 | ↑ ↓ | Move selection (Page Up / Page Down jump) |
 | → or Enter | Enter the selected folder |
 | Enter | Open the selected file with its default app |
+| ⌘ Enter | Actions for the selected item, fuzzy-searchable in the same panel |
 | ← | Go to the parent folder (when the search field is empty) |
 | ⌘C | Copy the absolute path |
 | ⌘⇧C | Copy the path relative to home, e.g. `~/dev/project` |
-| ⌘⇧O | Pick an application in the same panel; Enter opens with it, Esc goes back |
-| Esc | Clear the search, then hide |
+| ⌘⇧O | Open with an application, picked with fuzzy search |
+| ⌘R | Rename inline; the name is pre-selected without its extension |
+| ⌘D | Duplicate as "Name copy" |
+| ⌘⌫ | Move to Trash |
+| ⌘V | Paste files from the clipboard into the current folder |
+| Esc | Clear the search, then go back, then hide |
+
+The actions list offers Open, Open With, Reveal in Finder, Rename, Duplicate, Copy, Paste Here, Copy Path, Copy ~ Path, and Move to Trash. Copy and Paste use the system file pasteboard, so they interoperate with Finder. Nothing is ever deleted permanently; Trash is the only removal path.
 
 When the typed name doesn't match anything exactly, two extra rows appear at the end of the list: **Create folder** and **Create file**. Enter on either creates it in the current folder and selects it.
 

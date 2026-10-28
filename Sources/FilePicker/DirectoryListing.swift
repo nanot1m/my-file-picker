@@ -95,6 +95,15 @@ final class DirectoryLoader {
     }
 }
 
+extension DirectoryListing {
+    /// Builds a listing from arbitrary titles, in the given order, so it can be fuzzy-filtered.
+    static func synthetic(_ titles: [String]) -> DirectoryListing {
+        let dir = fse_dir_new()!
+        for title in titles { _ = fse_dir_append(dir, title, 0) }
+        return DirectoryListing(path: "", dir: dir)
+    }
+}
+
 struct ApplicationList {
     static let searchRoots = [
         "/Applications", "/Applications/Utilities",
@@ -122,12 +131,6 @@ struct ApplicationList {
             }
         }
         named.sort { fse_name_compare($0.name, $1.name) < 0 }
-        let dir = fse_dir_new()!
-        var paths: [String] = []
-        paths.reserveCapacity(named.count)
-        for item in named where fse_dir_append(dir, item.name, 0) == 0 {
-            paths.append(item.path)
-        }
-        return ApplicationList(listing: DirectoryListing(path: "", dir: dir), paths: paths)
+        return ApplicationList(listing: .synthetic(named.map(\.name)), paths: named.map(\.path))
     }
 }
