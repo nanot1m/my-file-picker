@@ -2,7 +2,7 @@
 # Run only on a disposable macOS CI runner. Never enable shell tracing here.
 set -euo pipefail
 umask 077
-: "${APP_PATH:?}" "${ZIP_PATH:?}" "${APPLE_CERTIFICATE_P12_BASE64:?}" "${APPLE_CERTIFICATE_PASSWORD:?}"
+: "${RUNNER_TEMP:?Set RUNNER_TEMP to an existing writable temporary directory}" "${APP_PATH:?}" "${ZIP_PATH:?}" "${APPLE_CERTIFICATE_P12_BASE64:?}" "${APPLE_CERTIFICATE_PASSWORD:?}"
 : "${APPLE_SIGNING_IDENTITY:?}" "${APPLE_TEAM_ID:?}" "${ASC_KEY_ID:?}" "${ASC_ISSUER_ID:?}" "${ASC_PRIVATE_KEY_BASE64:?}"
 [[ "$APPLE_SIGNING_IDENTITY" == "Developer ID Application: "* ]] || { echo 'Expected a Developer ID Application identity'; exit 1; }
 secret_dir=$(mktemp -d "$RUNNER_TEMP/apple-release.XXXXXX")
