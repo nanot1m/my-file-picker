@@ -252,7 +252,7 @@ int32_t fse_fuzzy_score(const char *name, const char *query) {
     if (query[qi]) return -1;
     if (!name[i] && i == qi) score += 20;
     score -= first > 10 ? 10 : first;
-    return score;
+    return score < 0 ? 0 : score;
 }
 
 static int compare_matches(void *thunk, const void *pa, const void *pb) {

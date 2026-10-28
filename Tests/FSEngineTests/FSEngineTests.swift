@@ -102,6 +102,8 @@ private func names(_ d: UnsafeMutablePointer<fse_dir>) -> [String] {
     #expect(fse_fuzzy_score("Makefile", "xyz") < 0)
     #expect(fse_fuzzy_score("Makefile", "") == 0)
     #expect(fse_fuzzy_score("Makefile", "mk") >= 0)
+    #expect(fse_fuzzy_score("adventofcode2025", "2") >= 0)
+    #expect(fse_fuzzy_score("a-very-long-name-with-match-at-the-end.txt", "x") >= 0)
     #expect(fse_fuzzy_score("Makefile", "make") > fse_fuzzy_score("some-make-thing", "make"))
     #expect(fse_fuzzy_score("Package.swift", "ps") > fse_fuzzy_score("apps", "ps"))
     #expect(fse_fuzzy_score("README.md", "readme.md") > fse_fuzzy_score("README.md.bak", "readme.md"))

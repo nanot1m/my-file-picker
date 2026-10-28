@@ -28,12 +28,22 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         let run: () -> Void
     }
 
-    private enum Mode {
-        case browse
-        case picker(Picker, browse: DirectoryListing, browseRow: Int)
-        case rename(target: String, browse: DirectoryListing, browseRow: Int)
+    private struct BrowseState {
+        let listing: DirectoryListing
+        let row: Int
+        let query: String
+        let matches: [UInt32]?
+        let showCreateRows: Bool
+        let scrollOrigin: NSPoint
     }
 
+    private enum Mode {
+        case browse
+        case picker(Picker, saved: BrowseState)
+        case rename(target: String, saved: BrowseState)
+    }
+
+    var openSettings: (() -> Void)?
     private var panel: LauncherPanel!
     private let pathLabel = NSTextField(labelWithString: "")
     private let searchField = NSTextField()
@@ -72,6 +82,10 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     func toggle() {
         if panel.isVisible { hide() } else { show() }
+    }
+
+    func hideIfVisible() {
+        if panel.isVisible { panel.orderOut(nil) }
     }
 
     private func show() {
@@ -327,7 +341,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         case #selector(NSResponder.pageDown(_:)), #selector(NSResponder.scrollPageDown(_:)):
             moveSelection(by: visibleRows)
         case #selector(NSResponder.insertNewline(_:)):
-            if case .rename(let target, _, _) = mode { commitRename(target) } else { activateSelection() }
+            if case .rename(let target, _) = mode { commitRename(target) } else { activateSelection() }
         case #selector(NSResponder.cancelOperation(_:)):
             switch mode {
             case .browse where !query.isEmpty: clearQuery(); applyFilter()
@@ -359,6 +373,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             if let path = selectedBrowsePath { enterOpenWith(target: path) }
         case Selector(("showActions:")):
             showActions()
+        case Selector(("openSettings:")):
+            openSettings?()
         case Selector(("renameSelection:")):
             if let path = selectedBrowsePath { enterRename(target: path) }
         case Selector(("trashSelection:")):
@@ -381,7 +397,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     @objc private func activateSelection() {
         guard let listing, let row = row(at: tableView.selectedRow) else { return }
         switch (mode, row) {
-        case (.picker(let picker, _, _), .entry(let i)):
+        case (.picker(let picker, _), .entry(let i)):
             picker.select(i)
         case (.picker, _), (.rename, _):
             return
@@ -408,9 +424,15 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     // MARK: - Modes
 
+    private func saveBrowseState() -> BrowseState? {
+        guard case .browse = mode, let listing else { return nil }
+        return BrowseState(listing: listing, row: tableView.selectedRow, query: query, matches: matches,
+                           showCreateRows: showCreateRows, scrollOrigin: scrollView.contentView.bounds.origin)
+    }
+
     private func enterPicker(_ picker: Picker) {
-        guard case .browse = mode, let browse = listing else { return }
-        mode = .picker(picker, browse: browse, browseRow: tableView.selectedRow)
+        guard let saved = saveBrowseState() else { return }
+        mode = .picker(picker, saved: saved)
         listing = picker.listing
         pathLabel.stringValue = picker.title
         searchField.placeholderString = picker.placeholder
@@ -422,20 +444,27 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     }
 
     private func leaveMode() {
-        let browse: DirectoryListing, browseRow: Int
+        let saved: BrowseState
         switch mode {
         case .browse: return
-        case .picker(_, let b, let r), .rename(_, let b, let r): (browse, browseRow) = (b, r)
+        case .picker(_, let state), .rename(_, let state): saved = state
         }
         mode = .browse
-        listing = browse
+        listing = saved.listing
         pathLabel.stringValue = displayPath(currentPath)
         searchField.placeholderString = Self.browsePlaceholder
         hintsLabel.stringValue = Self.browseHints
-        clearQuery()
+        filterGeneration += 1
+        query = saved.query
+        searchField.stringValue = saved.query
+        searchField.currentEditor()?.selectedRange = NSRange(location: saved.query.utf16.count, length: 0)
+        matches = saved.matches
+        showCreateRows = saved.showCreateRows
         tableView.reloadData()
-        if rowCount > 0 { selectRow(min(max(browseRow, 0), rowCount - 1)) }
-        setStatus(stats)
+        scrollView.contentView.scroll(to: saved.scrollOrigin)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        if rowCount > 0 { tableView.selectRowIndexes(IndexSet(integer: min(max(saved.row, 0), rowCount - 1)), byExtendingSelection: false) }
+        setStatus(saved.query.isEmpty ? stats : "\(saved.matches?.count ?? 0) of \(saved.listing.count)")
     }
 
     private func showActions() {
@@ -500,9 +529,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private func enterRename(target: String) {
         if case .picker = mode { leaveMode() }
-        guard case .browse = mode, let browse = listing else { return }
+        guard let saved = saveBrowseState() else { return }
         let url = URL(fileURLWithPath: target)
-        mode = .rename(target: target, browse: browse, browseRow: tableView.selectedRow)
+        mode = .rename(target: target, saved: saved)
         pathLabel.stringValue = "Rename “\(url.lastPathComponent)”"
         hintsLabel.stringValue = "↵ rename   esc cancel"
         matches = nil
@@ -597,7 +626,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     }
 
     private func icon(forEntry i: Int, in listing: DirectoryListing) -> NSImage {
-        if case .picker(let picker, _, _) = mode { return picker.icon(i) }
+        if case .picker(let picker, _) = mode { return picker.icon(i) }
         return listing.isDirectory(at: i) ? folderIcon : listing.isSymlink(at: i) ? linkIcon : fileIcon
     }
 

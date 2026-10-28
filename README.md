@@ -36,7 +36,7 @@ make run
 
 | Key | Action |
 |---|---|
-| ⌥ Space | Show / hide the panel |
+| ⌥ Space | Show / hide the panel (change it in Settings, ⌘,) |
 | type | Fuzzy-filter the current folder |
 | ↑ ↓ | Move selection (Page Up / Page Down jump) |
 | → or Enter | Enter the selected folder |
@@ -50,9 +50,10 @@ make run
 | ⌘D | Duplicate as "Name copy" |
 | ⌘⌫ | Move to Trash |
 | ⌘V | Paste files from the clipboard into the current folder |
+| ⌘, | Settings: record a different trigger shortcut |
 | Esc | Clear the search, then go back, then hide |
 
-The actions list offers Open, Open With, Reveal in Finder, Rename, Duplicate, Copy, Paste Here, Copy Path, Copy ~ Path, and Move to Trash. Copy and Paste use the system file pasteboard, so they interoperate with Finder. Nothing is ever deleted permanently; Trash is the only removal path.
+Leaving the actions or open-with list restores the previous search and selection. The actions list offers Open, Open With, Reveal in Finder, Rename, Duplicate, Copy, Paste Here, Copy Path, Copy ~ Path, and Move to Trash. Copy and Paste use the system file pasteboard, so they interoperate with Finder. Nothing is ever deleted permanently; Trash is the only removal path.
 
 When the typed name doesn't match anything exactly, two extra rows appear at the end of the list: **Create folder** and **Create file**. Enter on either creates it in the current folder and selects it.
 

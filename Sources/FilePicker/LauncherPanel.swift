@@ -22,22 +22,22 @@ final class LauncherPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    /// Matched by physical key so the shortcuts work under non-Latin keyboard layouts.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.function)
         let selector: Selector?
-        if event.keyCode == 0x24 || event.keyCode == 0x4C, mods == [.command] {
-            return onCommand?(Selector(("showActions:"))) ?? false
-        }
-        switch (event.charactersIgnoringModifiers?.lowercased(), mods) {
-        case ("c", [.command]): selector = #selector(NSText.copy(_:))
-        case ("r", [.command]): selector = Selector(("renameSelection:"))
-        case ("\u{7f}", [.command]): selector = Selector(("trashSelection:"))
-        case ("d", [.command]): selector = Selector(("duplicateSelection:"))
-        case ("c", [.command, .shift]): selector = Selector(("copyHomeRelativePath:"))
-        case ("o", [.command, .shift]): selector = Selector(("openWith:"))
-        case ("v", [.command]): selector = #selector(NSText.paste(_:))
-        case ("a", [.command]): selector = #selector(NSText.selectAll(_:))
-        case ("x", [.command]): selector = #selector(NSText.cut(_:))
+        switch (event.keyCode, mods) {
+        case (0x24, [.command]), (0x4C, [.command]): selector = Selector(("showActions:"))
+        case (0x08, [.command]): selector = #selector(NSText.copy(_:))
+        case (0x08, [.command, .shift]): selector = Selector(("copyHomeRelativePath:"))
+        case (0x1F, [.command, .shift]): selector = Selector(("openWith:"))
+        case (0x0F, [.command]): selector = Selector(("renameSelection:"))
+        case (0x33, [.command]): selector = Selector(("trashSelection:"))
+        case (0x02, [.command]): selector = Selector(("duplicateSelection:"))
+        case (0x2B, [.command]): selector = Selector(("openSettings:"))
+        case (0x09, [.command]): selector = #selector(NSText.paste(_:))
+        case (0x00, [.command]): selector = #selector(NSText.selectAll(_:))
+        case (0x07, [.command]): selector = #selector(NSText.cut(_:))
         default: selector = nil
         }
         if let selector, onCommand?(selector) == true { return true }
