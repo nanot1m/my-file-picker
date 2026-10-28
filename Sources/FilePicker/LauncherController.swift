@@ -10,7 +10,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private static let browseHints: [Hint] = [
         Hint(key: "↵", label: "open"), Hint(key: "⌘↵", label: "actions"), Hint(key: "⌘P", label: "preview"),
         Hint(key: "⌘C", label: "copy path"), Hint(key: "⌘⇧V", label: "paste into app"),
-        Hint(key: "⌘R", label: "rename"), Hint(key: "⌘⌫", label: "trash"), Hint(key: "esc", label: "close"),
+        Hint(key: "⌘R", label: "rename"), Hint(key: "esc", label: "close"),
     ]
     private var browseHints: [Hint] { Self.browseHints }
     private static let browsePlaceholder = "Search or type a new name"
@@ -445,8 +445,6 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             togglePreview()
         case Selector(("renameSelection:")):
             if let path = selectedBrowsePath { enterRename(target: path) }
-        case Selector(("trashSelection:")):
-            if let path = selectedBrowsePath { trash(path) }
         case Selector(("duplicateSelection:")):
             if let path = selectedBrowsePath { duplicate(path) }
         case Selector(("pasteIntoPreviousApp:")):

@@ -32,7 +32,6 @@ final class LauncherPanel: NSPanel {
         case (0x08, [.command, .shift]): selector = Selector(("copyHomeRelativePath:"))
         case (0x1F, [.command, .shift]): selector = Selector(("openWith:"))
         case (0x0F, [.command]): selector = Selector(("renameSelection:"))
-        case (0x33, [.command]): selector = Selector(("trashSelection:"))
         case (0x02, [.command]): selector = Selector(("duplicateSelection:"))
         case (0x2B, [.command]): selector = Selector(("openSettings:"))
         case (0x23, [.command]): selector = Selector(("togglePreview:"))

@@ -44,13 +44,12 @@ make run
 | ⌘⇧O | Open with an application, picked with fuzzy search |
 | ⌘R | Rename inline; the name is pre-selected without its extension |
 | ⌘D | Duplicate as "Name copy" |
-| ⌘⌫ | Move to Trash |
 | ⌘V | Paste files from the clipboard into the current folder |
 | ⌘⇧V | Paste the selected file into the app you came from (e.g. a Telegram or Slack message box) |
 | ⌘, | Settings: record a different trigger shortcut |
 | Esc | Clear the search, then go back, then hide |
 
-Leaving the actions or open-with list restores the previous search and selection. The actions list offers Open, Open With, Reveal in Finder, Rename, Duplicate, Copy, Paste into the previous app, Paste Here, Copy Path, Copy ~ Path, and Move to Trash. Copy and Paste use the system file pasteboard, so they interoperate with Finder. Nothing is ever deleted permanently; Trash is the only removal path.
+Leaving the actions or open-with list restores the previous search and selection. The actions list offers Open, Open With, Reveal in Finder, Rename, Duplicate, Copy, Paste into the previous app, Paste Here, Copy Path, Copy ~ Path, and Move to Trash. Copy and Paste use the system file pasteboard, so they interoperate with Finder. Move to Trash is available only from the actions list, never from a bare shortcut, and nothing is ever deleted permanently.
 
 When the typed name doesn't match anything exactly, two extra rows appear at the end of the list: **Create folder** and **Create file**. Enter on either creates it in the current folder and selects it.
 
