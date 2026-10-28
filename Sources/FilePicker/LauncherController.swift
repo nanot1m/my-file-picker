@@ -5,9 +5,11 @@ import Quartz
 final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     private static let lastDirectoryKey = "lastDirectory"
     private static let listSize = NSSize(width: 680, height: 460)
-    private static let previewWidth: CGFloat = 400
+    private static let previewWidth: CGFloat = 300
     private static let previewKey = "previewEnabled"
     private static let browseHints = "↵ open  ⌘↵ actions  ⌘P preview  ⌘C path  ⌘⇧V paste into app  ⌘R rename  ⌘⌫ trash  esc"
+    private static let compactHints = "↵ open  ⌘↵ actions  ⌘P preview  esc"
+    private var browseHints: String { previewEnabled ? Self.compactHints : Self.browseHints }
     private static let browsePlaceholder = "Search or type a new name"
 
     private enum Row {
@@ -50,11 +52,12 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var panel: LauncherPanel!
     private let pathLabel = NSTextField(labelWithString: "")
     private let searchField = NSTextField()
-    private let hintsLabel = NSTextField(labelWithString: browseHints)
+    private let hintsLabel = NSTextField(labelWithString: LauncherController.browseHints)
     private let statusLabel = NSTextField(labelWithString: "")
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
     private let previewSeparator = NSBox()
+    private var horizontalSeparators: [NSBox] = []
     private let previewView = QLPreviewView(frame: .zero, style: .normal)!
     private var previewEnabled = UserDefaults.standard.bool(forKey: previewKey)
     private var previewUpdate: DispatchWorkItem?
@@ -104,7 +107,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         if let front = NSWorkspace.shared.frontmostApplication, front != NSRunningApplication.current {
             previousApp = front
         }
-        let size = panelSize
+        let size = Self.listSize
         panel.setFrameOrigin(NSPoint(x: frame.midX - size.width / 2,
                                      y: frame.midY - size.height / 2 + frame.height * 0.12))
         panel.makeKeyAndOrderFront(nil)
@@ -164,6 +167,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             separator.boxType = .separator
             separator.autoresizingMask = [y > 100 ? .minYMargin : .maxYMargin]
             effect.addSubview(separator)
+            horizontalSeparators.append(separator)
         }
 
         previewSeparator.boxType = .separator
@@ -225,17 +229,22 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     // MARK: - Preview
 
-    private var panelSize: NSSize {
-        NSSize(width: Self.listSize.width + (previewEnabled ? Self.previewWidth : 0), height: Self.listSize.height)
-    }
-
+    /// The preview takes its width from the list column; the panel itself never changes size.
     private func applyPreviewLayout() {
         previewSeparator.isHidden = !previewEnabled
         previewView.isHidden = !previewEnabled
-        let old = panel.frame
-        let size = panelSize
-        let x = panel.isVisible ? old.origin.x - (size.width - old.width) / 2 : old.origin.x
-        panel.setFrame(NSRect(x: x, y: old.origin.y, width: size.width, height: size.height), display: true)
+        let total = Self.listSize.width, h = Self.listSize.height
+        let listWidth = previewEnabled ? total - Self.previewWidth : total
+        pathLabel.frame.size.width = listWidth - 32
+        searchField.frame.size.width = listWidth - 28
+        for separator in horizontalSeparators { separator.frame.size.width = listWidth }
+        hintsLabel.frame.size.width = listWidth * 0.80
+        statusLabel.frame = NSRect(x: listWidth * 0.80 + 8, y: 8, width: listWidth * 0.20 - 24, height: 16)
+        if case .browse = mode { hintsLabel.stringValue = browseHints }
+        scrollView.frame.size.width = listWidth
+        tableView.sizeLastColumnToFit()
+        previewSeparator.frame = NSRect(x: listWidth, y: 0, width: 1, height: h)
+        previewView.frame = NSRect(x: listWidth + 1, y: 0, width: Self.previewWidth - 1, height: h)
         if previewEnabled { schedulePreviewUpdate(delay: 0) } else { previewView.previewItem = nil }
     }
 
@@ -521,7 +530,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         listing = saved.listing
         pathLabel.stringValue = displayPath(currentPath)
         searchField.placeholderString = Self.browsePlaceholder
-        hintsLabel.stringValue = Self.browseHints
+        hintsLabel.stringValue = browseHints
         filterGeneration += 1
         query = saved.query
         searchField.stringValue = saved.query
