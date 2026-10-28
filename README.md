@@ -38,7 +38,7 @@ make run
 | Enter | Open the selected file with its default app |
 | ⌘ Enter | Actions for the selected item, fuzzy-searchable in the same panel |
 | ⌘S / Tab | Selection mode: Enter marks the current row, Tab marks and moves on, ⇧Tab moves back, ⌘A marks all, Esc leaves. ⌘ Enter then runs an action on every marked item (Open, Open With, Reveal, Duplicate, Copy, Paste into app, Copy paths, Trash) |
-| ⌘P | Toggle a Quick Look preview column for the selected item (persists) |
+| ⌘P | Toggle a preview column: Quick Look for files, a contents listing for folders (persists) |
 | ← | Go to the parent folder (when the search field is empty) |
 | ⌘↑ | Go to the parent folder, even while a search is typed |
 | ⌘C | Copy the absolute path |

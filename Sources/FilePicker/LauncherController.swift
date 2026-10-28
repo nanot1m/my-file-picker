@@ -65,6 +65,11 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private let previewSeparator = NSBox()
     private var horizontalSeparators: [NSBox] = []
     private let previewView = QLPreviewView(frame: .zero, style: .normal)!
+    private let folderPreviewScroll = NSScrollView()
+    private let folderPreviewTable = NSTableView()
+    private let folderPreviewCaption = NSTextField(labelWithString: "")
+    private let previewLoader = DirectoryLoader()
+    private var folderPreview: DirectoryListing?
     private var previewEnabled = UserDefaults.standard.bool(forKey: previewKey)
     private var previewUpdate: DispatchWorkItem?
 
@@ -189,6 +194,36 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         previewView.shouldCloseWithWindow = false
         effect.addSubview(previewView)
 
+        folderPreviewCaption.frame = NSRect(x: w + 13, y: h - 26, width: Self.previewWidth - 26, height: 16)
+        folderPreviewCaption.font = .systemFont(ofSize: 11, weight: .medium)
+        folderPreviewCaption.textColor = .secondaryLabelColor
+        folderPreviewCaption.lineBreakMode = .byTruncatingTail
+        folderPreviewCaption.isHidden = true
+        effect.addSubview(folderPreviewCaption)
+
+        let previewColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("preview"))
+        previewColumn.resizingMask = .autoresizingMask
+        folderPreviewTable.addTableColumn(previewColumn)
+        folderPreviewTable.headerView = nil
+        folderPreviewTable.rowHeight = 22
+        folderPreviewTable.intercellSpacing = .zero
+        folderPreviewTable.style = .plain
+        folderPreviewTable.selectionHighlightStyle = .none
+        folderPreviewTable.backgroundColor = .clear
+        folderPreviewTable.refusesFirstResponder = true
+        folderPreviewTable.usesAutomaticRowHeights = false
+        folderPreviewTable.dataSource = self
+        folderPreviewTable.delegate = self
+        folderPreviewScroll.frame = NSRect(x: w + 1, y: 31, width: Self.previewWidth - 1, height: h - 34 - 31)
+        folderPreviewScroll.hasVerticalScroller = true
+        folderPreviewScroll.drawsBackground = false
+        folderPreviewScroll.documentView = folderPreviewTable
+        folderPreviewScroll.isHidden = true
+        previewColumn.width = folderPreviewScroll.contentSize.width
+        folderPreviewTable.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+        folderPreviewTable.sizeLastColumnToFit()
+        effect.addSubview(folderPreviewScroll)
+
         hintsBar.frame = NSRect(x: 0, y: 0, width: w, height: 30)
         hintsBar.autoresizingMask = [.maxYMargin]
         hintsBar.hints = browseHints
@@ -245,7 +280,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         tableView.sizeLastColumnToFit()
         previewSeparator.frame = NSRect(x: listWidth, y: 0, width: 1, height: h)
         previewView.frame = NSRect(x: listWidth + 1, y: 0, width: Self.previewWidth - 1, height: h)
-        if previewEnabled { schedulePreviewUpdate(delay: 0) } else { previewView.previewItem = nil }
+        folderPreviewCaption.frame.origin.x = listWidth + 13
+        folderPreviewScroll.frame.origin.x = listWidth + 1
+        if previewEnabled { schedulePreviewUpdate(delay: 0) } else { clearPreview() }
     }
 
     private func togglePreview() {
@@ -259,9 +296,11 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         guard previewEnabled else { return }
         let item = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            let url = self.selectedBrowsePath.map { URL(fileURLWithPath: $0) }
-            if (self.previewView.previewItem as? URL) != url {
-                self.previewView.previewItem = url as QLPreviewItem?
+            guard let path = self.selectedBrowsePath else { self.clearPreview(); return }
+            if let i = self.selectedEntryIndex, self.isNavigableDirectory(entry: i) {
+                self.showFolderPreview(path)
+            } else {
+                self.showFilePreview(URL(fileURLWithPath: path))
             }
         }
         previewUpdate = item
@@ -269,7 +308,47 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
+        guard (notification.object as? NSTableView) === tableView else { return }
         schedulePreviewUpdate()
+    }
+
+    private func clearPreview() {
+        previewView.previewItem = nil
+        folderPreview = nil
+        folderPreviewTable.reloadData()
+        folderPreviewScroll.isHidden = true
+        folderPreviewCaption.isHidden = true
+    }
+
+    private func showFilePreview(_ url: URL) {
+        folderPreviewScroll.isHidden = true
+        folderPreviewCaption.isHidden = true
+        previewView.isHidden = false
+        if (previewView.previewItem as? URL) != url { previewView.previewItem = url as QLPreviewItem }
+    }
+
+    private func showFolderPreview(_ path: String) {
+        previewView.isHidden = true
+        previewView.previewItem = nil
+        folderPreviewScroll.isHidden = false
+        folderPreviewCaption.isHidden = false
+        if folderPreview?.path != path {
+            folderPreviewCaption.stringValue = "Loading…"
+            previewLoader.load(path, includeHidden: includeHidden) { [weak self] result in
+                guard let self, self.previewEnabled, self.selectedBrowsePath == path else { return }
+                switch result {
+                case .success(let listing):
+                    self.folderPreview = listing
+                    self.folderPreviewCaption.stringValue = listing.count == 0 ? "Empty folder"
+                        : "\(listing.directoryCount) folders, \(listing.count - listing.directoryCount) files"
+                case .failure(let error):
+                    self.folderPreview = nil
+                    self.folderPreviewCaption.stringValue = error.description
+                }
+                self.folderPreviewTable.reloadData()
+                self.folderPreviewTable.scrollRowToVisible(0)
+            }
+        }
     }
 
     // MARK: - Navigation
@@ -838,9 +917,12 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         return listing.isDirectory(at: i) ? folderIcon : listing.isSymlink(at: i) ? linkIcon : fileIcon
     }
 
-    func numberOfRows(in tableView: NSTableView) -> Int { rowCount }
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        tableView === folderPreviewTable ? (folderPreview?.count ?? 0) : rowCount
+    }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        if tableView === folderPreviewTable { return nil }
         let id = NSUserInterfaceItemIdentifier("Row")
         if let v = tableView.makeView(withIdentifier: id, owner: nil) as? EmphasizedRowView { return v }
         let v = EmphasizedRowView()
@@ -849,9 +931,15 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row rowIndex: Int) -> NSView? {
-        guard let listing, let row = row(at: rowIndex) else { return nil }
         let cell = tableView.makeView(withIdentifier: FileCellView.identifier, owner: nil) as? FileCellView
             ?? { let c = FileCellView(frame: NSRect(x: 0, y: 0, width: tableView.bounds.width, height: tableView.rowHeight)); c.identifier = FileCellView.identifier; return c }()
+        if tableView === folderPreviewTable {
+            guard let folderPreview, rowIndex < folderPreview.count else { return nil }
+            let image = folderPreview.isDirectory(at: rowIndex) ? folderIcon : folderPreview.isSymlink(at: rowIndex) ? linkIcon : fileIcon
+            cell.configure(name: folderPreview.name(at: rowIndex), image: image, secondary: true)
+            return cell
+        }
+        guard let listing, let row = row(at: rowIndex) else { return nil }
         switch row {
         case .entry(let i):
             let markState: MarkState = selectionMode && { if case .browse = mode { return true } else { return false } }()
