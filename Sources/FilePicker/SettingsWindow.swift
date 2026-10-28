@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 
 final class ShortcutRecorder: NSView {
     var shortcut: HotKeySetting { didSet { needsDisplay = true } }
@@ -87,10 +88,13 @@ final class SettingsWindow: NSWindow {
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let recorder: ShortcutRecorder
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
+    private let accessibilityStatus = NSTextField(labelWithString: "")
+    private let grantButton = NSButton(title: "Grant…", target: nil, action: nil)
+    private var statusTimer: Timer?
     var onRecordingChanged: ((Bool) -> Void)?
 
     init() {
-        let size = NSSize(width: 380, height: 150)
+        let size = NSSize(width: 380, height: 210)
         let window = SettingsWindow(contentRect: NSRect(origin: .zero, size: size),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "File Picker Settings"
@@ -113,6 +117,28 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         reset.frame = NSRect(x: 158, y: size.height - 82, width: 140, height: 24)
         content.addSubview(reset)
 
+        let axLabel = NSTextField(labelWithString: "Accessibility")
+        axLabel.frame = NSRect(x: 20, y: size.height - 124, width: 130, height: 20)
+        axLabel.alignment = .right
+        content.addSubview(axLabel)
+
+        accessibilityStatus.frame = NSRect(x: 160, y: size.height - 124, width: 120, height: 20)
+        content.addSubview(accessibilityStatus)
+
+        grantButton.target = self
+        grantButton.action = #selector(grantAccessibility)
+        grantButton.bezelStyle = .rounded
+        grantButton.controlSize = .small
+        grantButton.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        grantButton.frame = NSRect(x: 280, y: size.height - 127, width: 80, height: 24)
+        content.addSubview(grantButton)
+
+        let axHint = NSTextField(wrappingLabelWithString: "Needed only for “Paste into app” (⌘⇧V).")
+        axHint.frame = NSRect(x: 160, y: size.height - 160, width: 200, height: 32)
+        axHint.font = .systemFont(ofSize: 11)
+        axHint.textColor = .secondaryLabelColor
+        content.addSubview(axHint)
+
         errorLabel.frame = NSRect(x: 20, y: 14, width: size.width - 40, height: 34)
         errorLabel.font = .systemFont(ofSize: 11)
         errorLabel.textColor = .systemRed
@@ -127,6 +153,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     func show() {
         recorder.shortcut = Settings.hotKey
         errorLabel.stringValue = ""
+        refreshAccessibilityStatus()
+        statusTimer?.invalidate()
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.refreshAccessibilityStatus()
+        }
         window?.center()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
@@ -139,6 +170,23 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         window?.makeFirstResponder(nil)
+        statusTimer?.invalidate()
+        statusTimer = nil
+    }
+
+    private func refreshAccessibilityStatus() {
+        let trusted = AXIsProcessTrusted()
+        accessibilityStatus.stringValue = trusted ? "Granted" : "Not granted"
+        accessibilityStatus.textColor = trusted ? .systemGreen : .secondaryLabelColor
+        grantButton.isEnabled = !trusted
+    }
+
+    @objc private func grantAccessibility() {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        guard !AXIsProcessTrustedWithOptions(options) else { return refreshAccessibilityStatus() }
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     @objc private func resetShortcut() {
