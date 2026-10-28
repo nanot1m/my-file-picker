@@ -180,7 +180,6 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         previewView.autostarts = true
         previewView.shouldCloseWithWindow = false
         effect.addSubview(previewView)
-        applyPreviewLayout()
 
         hintsLabel.frame = NSRect(x: 16, y: 8, width: w * 0.80, height: 16)
         hintsLabel.font = .systemFont(ofSize: 11)
@@ -225,6 +224,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         tableView.sizeLastColumnToFit()
         effect.addSubview(scrollView)
+        applyPreviewLayout()
     }
 
     // MARK: - Preview
@@ -242,6 +242,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         statusLabel.frame = NSRect(x: listWidth * 0.80 + 8, y: 8, width: listWidth * 0.20 - 24, height: 16)
         if case .browse = mode { hintsLabel.stringValue = browseHints }
         scrollView.frame.size.width = listWidth
+        scrollView.tile()
+        tableView.frame.size.width = scrollView.contentSize.width
         tableView.sizeLastColumnToFit()
         previewSeparator.frame = NSRect(x: listWidth, y: 0, width: 1, height: h)
         previewView.frame = NSRect(x: listWidth + 1, y: 0, width: Self.previewWidth - 1, height: h)
