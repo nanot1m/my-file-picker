@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>File Picker — keyboard-first file navigator for macOS</title>
+<meta name="description" content="A Spotlight-style file navigator for macOS. Press Option-Space, type a few letters, hit Enter. Native AppKit on a C engine.">
+<link rel="icon" href="favicon.png">
+<meta property="og:title" content="File Picker">
+<meta property="og:description" content="Keyboard-first, Spotlight-style file navigator for macOS.">
+<meta property="og:image" content="https://nanot1m.github.io/my-file-picker/icon.png">
+<style>
+  :root {
+    --bg: #f5f6f8; --fg: #1d1d1f; --muted: #6e6e73; --card: #ffffff; --line: rgba(0,0,0,.08);
+    --accent: #2f6cf2; --panel: rgba(240,242,246,.92); --sel: #4d8cf7; --key: #e9ebf0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1115; --fg: #f3f3f5; --muted: #9a9aa3; --card: #171a21; --line: rgba(255,255,255,.1);
+            --panel: rgba(36,40,48,.92); --sel: #3b7cf0; --key: #262a33; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+         background: var(--bg); color: var(--fg); -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); text-decoration: none; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 72px 0 32px; text-align: center; }
+  header img { width: 128px; height: 128px; filter: drop-shadow(0 12px 24px rgba(0,0,0,.18)); }
+  h1 { font-size: 44px; letter-spacing: -.02em; margin: 20px 0 8px; }
+  .tag { font-size: 20px; color: var(--muted); margin: 0 auto 28px; max-width: 560px; }
+  .btn { display: inline-block; background: var(--accent); color: #fff; padding: 12px 22px; border-radius: 12px;
+         font-weight: 600; margin: 4px; }
+  .btn.alt { background: var(--key); color: var(--fg); }
+  .fine { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  kbd { font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--key); border: 1px solid var(--line);
+        border-bottom-width: 2px; border-radius: 6px; padding: 3px 6px; color: var(--fg); white-space: nowrap; }
+
+  .panel { margin: 48px auto 0; max-width: 680px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+           box-shadow: 0 30px 60px rgba(0,0,0,.25); overflow: hidden; backdrop-filter: blur(20px); }
+  .panel .path { font-size: 12px; color: var(--muted); padding: 12px 16px 0; }
+  .panel .input { font-size: 22px; padding: 6px 16px 12px; border-bottom: 1px solid var(--line); }
+  .panel .input span { color: var(--muted); }
+  .panel .cursor { display: inline-block; width: 2px; height: 24px; background: var(--accent); vertical-align: -4px; margin-left: 1px;
+                   animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .panel ul { list-style: none; margin: 0; padding: 4px 0; }
+  .panel li { padding: 3px 16px 3px 44px; position: relative; font-size: 14px; }
+  .panel li::before { content: ""; position: absolute; left: 14px; top: 6px; width: 18px; height: 14px; border-radius: 3px;
+                      background: linear-gradient(#8ec1ff, #5ea2f5); }
+  .panel li.file::before { background: linear-gradient(#fff, #e6e6e6); border: 1px solid var(--line); width: 13px; height: 16px; left: 16px; top: 5px; }
+  .panel li.sel { background: var(--sel); color: #fff; }
+  .panel li.sel::before { background: linear-gradient(#dcebff, #b8d4ff); }
+  .panel .hints { border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); padding: 7px 16px; display: flex;
+                  justify-content: space-between; gap: 12px; white-space: nowrap; overflow: hidden; }
+
+  section { padding: 56px 0 0; }
+  h2 { font-size: 26px; letter-spacing: -.01em; margin: 0 0 20px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  td { padding: 10px 16px; border-top: 1px solid var(--line); font-size: 14px; }
+  tr:first-child td { border-top: 0; }
+  td:first-child { width: 160px; white-space: nowrap; }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; overflow: auto; font-size: 13px; }
+  footer { padding: 64px 0 40px; text-align: center; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="icon.png" alt="File Picker icon">
+    <h1>File Picker</h1>
+    <p class="tag">A keyboard-first, Spotlight-style file navigator for macOS. Press <kbd>⌥ Space</kbd>, type a few letters, hit <kbd>↵</kbd>.</p>
+    <a class="btn" href="https://github.com/nanot1m/my-file-picker/releases/latest">Download for macOS</a>
+    <a class="btn alt" href="https://github.com/nanot1m/my-file-picker">View on GitHub</a>
+    <p class="fine">macOS 13+, Apple Silicon. Free and open source, MIT.</p>
+
+    <div class="panel" aria-hidden="true">
+      <div class="path">~/dev</div>
+      <div class="input">pro<span class="cursor"></span></div>
+      <ul>
+        <li class="sel">projects</li>
+        <li>prototypes</li>
+        <li>my-file-picker</li>
+        <li class="file">proposal.md</li>
+        <li class="file">profile.json</li>
+      </ul>
+      <div class="hints"><span>↵ open &nbsp; ⌘↵ actions &nbsp; ← back &nbsp; ⌘C path &nbsp; ⌘⇧V paste into app &nbsp; ⌘R rename &nbsp; ⌘⌫ trash &nbsp; esc</span><span>5 of 33</span></div>
+    </div>
+  </header>
+
+  <section>
+    <h2>Fast where it matters</h2>
+    <div class="grid">
+      <div class="card"><h3>Native, no web views</h3><p>AppKit panel on top of a small C engine. Opens in one frame, no Electron, no dependencies.</p></div>
+      <div class="card"><h3>Fuzzy search as you type</h3><p>Filters the current folder instantly. Prefix, word-boundary and camel-case matches rank first.</p></div>
+      <div class="card"><h3>Create by typing</h3><p>Type a name that doesn't exist and get "Create folder" and "Create file" rows right there.</p></div>
+      <div class="card"><h3>Actions on ⌘↵</h3><p>Open with, reveal in Finder, rename inline, duplicate, copy, paste, move to Trash. Same fuzzy search.</p></div>
+      <div class="card"><h3>Paste into any app</h3><p>⌘⇧V drops the selected file into the message box you came from: Telegram, Slack, Mail.</p></div>
+      <div class="card"><h3>Huge folders, no stutter</h3><p>Enumerates with <code>getattrlistbulk()</code> off the main thread. 100,000 entries in about 150 ms, 42 bytes each.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Keys</h2>
+    <table>
+      <tr><td><kbd>⌥ Space</kbd></td><td>Show or hide the panel. Rebind it in Settings (<kbd>⌘ ,</kbd>).</td></tr>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Move selection</td></tr>
+      <tr><td><kbd>→</kbd> / <kbd>↵</kbd></td><td>Enter folder, or open file with its default app</td></tr>
+      <tr><td><kbd>←</kbd></td><td>Parent folder</td></tr>
+      <tr><td><kbd>⌘ ↵</kbd></td><td>Actions for the selected item</td></tr>
+      <tr><td><kbd>⌘ C</kbd> / <kbd>⌘ ⇧ C</kbd></td><td>Copy absolute path / path with <code>~/</code></td></tr>
+      <tr><td><kbd>⌘ ⇧ O</kbd></td><td>Open with an application, fuzzy-searched</td></tr>
+      <tr><td><kbd>⌘ ⇧ V</kbd></td><td>Paste the selected file into the previous app</td></tr>
+      <tr><td><kbd>⌘ R</kbd> <kbd>⌘ D</kbd> <kbd>⌘ ⌫</kbd></td><td>Rename, duplicate, move to Trash</td></tr>
+      <tr><td><kbd>esc</kbd></td><td>Clear search, go back, hide</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Install</h2>
+    <p>Download the zip from the <a href="https://github.com/nanot1m/my-file-picker/releases/latest">latest release</a>, unzip, move <code>FilePicker.app</code> to Applications. The app is not notarized yet, so clear the quarantine flag on first launch:</p>
+    <pre>xattr -dr com.apple.quarantine /Applications/FilePicker.app
+open /Applications/FilePicker.app</pre>
+    <p>Or build from source with the Xcode Command Line Tools:</p>
+    <pre>git clone https://github.com/nanot1m/my-file-picker.git
+cd my-file-picker &amp;&amp; make run</pre>
+    <p class="fine">No Full Disk Access needed. "Paste into app" asks for Accessibility once, from Settings.</p>
+  </section>
+
+  <footer>MIT License · <a href="https://github.com/nanot1m/my-file-picker">github.com/nanot1m/my-file-picker</a></footer>
+</div>
+</body>
+</html>

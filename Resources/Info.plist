@@ -4,6 +4,7 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key><string>en</string>
 	<key>CFBundleExecutable</key><string>FilePicker</string>
+	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>CFBundleIdentifier</key><string>com.hazam.filepicker</string>
 	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
 	<key>CFBundleName</key><string>File Picker</string>
