@@ -61,7 +61,17 @@ When the typed name doesn't match anything exactly, two extra rows appear at the
 ## Permissions
 
 - No Full Disk Access. The global hotkey uses Carbon `RegisterEventHotKey`, which needs no Accessibility permission.
-- "Paste into app" (⌘⇧V) sends a ⌘V keystroke to the previous app, which does require Accessibility. macOS prompts the first time; until granted, the file is still placed on the clipboard so a manual ⌘V works. Because the bundle is ad-hoc signed, macOS may ask again after you rebuild.
+- "Paste into app" (⌘⇧V) sends a ⌘V keystroke to the previous app, which does require Accessibility. Grant it from Settings (⌘,). Until granted, the file is still placed on the clipboard so a manual ⌘V works.
+
+### Keeping the Accessibility grant across rebuilds
+
+macOS ties the grant to the app's code signature. An ad-hoc signature (the default) changes on every build, so the entry in System Settings goes stale and the app reports "Not granted" even though its toggle is on. To avoid that when building from source, create a local signing identity once:
+
+1. Open Keychain Access, then Keychain Access menu, Certificate Assistant, Create a Certificate.
+2. Name: `FilePicker Dev`. Identity Type: Self Signed Root. Certificate Type: Code Signing. Create.
+3. Run `tccutil reset Accessibility com.hazam.filepicker` to drop the stale entry, then `make run` and grant again.
+
+`make bundle` signs with `FilePicker Dev` automatically when it exists, or pass `CODESIGN_IDENTITY="Apple Development: …"` to use a developer certificate.
 - macOS asks for per-folder consent the first time you enter Desktop, Documents, Downloads, iCloud Drive, or removable volumes. If you decline, the panel shows "Permission denied" and stays where it was.
 
 ## Architecture
