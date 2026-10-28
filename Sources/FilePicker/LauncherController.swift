@@ -13,7 +13,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         Hint(key: "⌘R", label: "rename"), Hint(key: "esc", label: "close"),
     ]
     private static let selectionHints: [Hint] = [
-        Hint(key: "⇥", label: "mark"), Hint(key: "⌘A", label: "mark all"), Hint(key: "⌘↵", label: "actions for marked"),
+        Hint(key: "↵", label: "mark"), Hint(key: "⇥", label: "mark & next"), Hint(key: "⌘A", label: "all"), Hint(key: "⌘↵", label: "actions"),
         Hint(key: "esc", label: "done"),
     ]
     private var browseHints: [Hint] { selectionMode ? Self.selectionHints : Self.browseHints }
@@ -416,7 +416,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         case #selector(NSResponder.pageDown(_:)), #selector(NSResponder.scrollPageDown(_:)):
             moveSelection(by: visibleRows)
         case #selector(NSResponder.insertNewline(_:)):
-            if case .rename(let target, _) = mode { commitRename(target) } else { activateSelection() }
+            if case .rename(let target, _) = mode { commitRename(target) }
+            else if selectionMode, case .browse = mode { toggleMarkOnSelection(advance: 0) }
+            else { activateSelection() }
         case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.insertBacktab(_:)):
             guard case .browse = mode else { return false }
             toggleMarkOnSelection(advance: selector == #selector(NSResponder.insertTab(_:)) ? 1 : -1)

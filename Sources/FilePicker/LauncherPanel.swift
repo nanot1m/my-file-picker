@@ -83,8 +83,8 @@ final class FileCellView: NSTableCellView {
         label.font = .systemFont(ofSize: 13)
         label.frame = NSRect(x: 36, y: (frame.height - 17) / 2, width: frame.width - 46, height: 17)
         label.autoresizingMask = [.width, .minYMargin, .maxYMargin]
-        mark.frame = NSRect(x: frame.width - 34, y: (frame.height - 16) / 2, width: 16, height: 16)
-        mark.autoresizingMask = [.minXMargin, .minYMargin, .maxYMargin]
+        mark.frame = NSRect(x: 12, y: (frame.height - 16) / 2, width: 16, height: 16)
+        mark.autoresizingMask = [.maxXMargin, .minYMargin, .maxYMargin]
         mark.imageScaling = .scaleProportionallyDown
         mark.isHidden = true
         addSubview(icon)
@@ -103,7 +103,10 @@ final class FileCellView: NSTableCellView {
         mark.isHidden = state == .hidden
         mark.image = state == .marked ? Self.markedImage : Self.unmarkedImage
         mark.contentTintColor = state == .marked ? .controlAccentColor : .tertiaryLabelColor
-        label.frame.size.width = bounds.width - 46 - (state == .hidden ? 0 : 30)
+        let shift: CGFloat = state == .hidden ? 0 : 26
+        icon.frame.origin.x = 10 + shift
+        label.frame.origin.x = 36 + shift
+        label.frame.size.width = bounds.width - 46 - shift
     }
 }
 
