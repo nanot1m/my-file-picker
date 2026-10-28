@@ -3,7 +3,7 @@ BIN := .build/release/FilePicker
 VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo 0.0.0)
 DIST := build/dist/FilePicker-$(VERSION).zip
 # A stable identity keeps Accessibility grants across rebuilds; "-" (ad-hoc) changes every build.
-CODESIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | grep -q "FilePicker Dev" && echo "FilePicker Dev" || echo -)
+CODESIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | grep -q "Local Dev" && echo "Local Dev" || echo -)
 
 .PHONY: build bundle run stop test bench asan tsan dist icon clean
 
