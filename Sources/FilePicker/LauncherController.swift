@@ -82,6 +82,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var includeHidden = false
 
     private var query = ""
+    private var pendingQuery: String?
     private var selectionMode = false
     private var marked = Set<Int>()
     private var pinned: [Pinned] = []
@@ -417,7 +418,14 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                 let row = name.flatMap { listing.index(ofName: $0) }.map { $0 + self.pinned.count } ?? 0
                 if self.rowCount > 0 { self.selectRow(min(row, self.rowCount - 1)) }
                 Perf.report("navigate", since: t0)
+                if let pending = self.pendingQuery {
+                    self.pendingQuery = nil
+                    self.searchField.stringValue = pending
+                    self.query = pending
+                    if pending.contains("/") { self.resolvePathSegment() } else if !pending.isEmpty { self.applyFilter() }
+                }
             case .failure(let error):
+                self.pendingQuery = nil
                 self.setStatus("\(self.displayPath(path)): \(error)")
             }
         }
@@ -451,7 +459,42 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     func controlTextDidChange(_ notification: Notification) {
         if case .rename = mode { return }
         query = searchField.stringValue
-        applyFilter()
+        if case .browse = mode, query.contains("/") { resolvePathSegment() } else { applyFilter() }
+    }
+
+    /// "a/b/c": each slash commits the segment before it by descending into the best fuzzy-matched folder.
+    private func resolvePathSegment() {
+        guard let slash = query.firstIndex(of: "/") else { applyFilter(); return }
+        let head = String(query[..<slash])
+        let rest = String(query[query.index(after: slash)...])
+        let target: String?
+        switch head {
+        case "": target = "/"
+        case "~": target = NSHomeDirectory()
+        case "..": target = currentPath == "/" ? "/" : (currentPath as NSString).deletingLastPathComponent
+        case ".": target = currentPath
+        default: target = bestFolderMatch(for: head)
+        }
+        guard let target else {
+            setStatus("No folder matches “\(head)”")
+            applyFilter()
+            return
+        }
+        pendingQuery = rest
+        navigate(to: target)
+    }
+
+    private func bestFolderMatch(for segment: String) -> String? {
+        guard let listing else { return nil }
+        let (indices, _) = listing.filter(query: segment)
+        if let i = indices.first(where: { isNavigableDirectory(entry: Int($0)) }) {
+            return listing.fullPath(at: Int(i))
+        }
+        let pinnedMatch = Pins.rows(excluding: currentPath)
+            .map { ($0, fse_fuzzy_score($0.name, segment)) }
+            .filter { $0.1 >= 0 }
+            .max { $0.1 < $1.1 }
+        return pinnedMatch?.0.path
     }
 
     private func applyFilter() {

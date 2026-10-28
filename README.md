@@ -32,7 +32,7 @@ make run
 | Key | Action |
 |---|---|
 | ⌥ Space | Show / hide the panel (change it in Settings, ⌘,) |
-| type | Fuzzy-filter the current folder |
+| type | Fuzzy-filter the current folder. A `/` commits the segment before it: `de/src/` descends into the best match for "de", then "src". `/` alone goes to the root, `~/` home, `../` up |
 | ↑ ↓ | Move selection (Page Up / Page Down jump) |
 | → or Enter | Enter the selected folder |
 | Enter | Open the selected file with its default app |
