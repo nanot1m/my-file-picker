@@ -20,6 +20,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private static let browsePlaceholder = "Search or type a new name"
 
     private enum Row {
+        case pinned(Pinned)
         case entry(Int)
         case createFolder
         case createFile
@@ -84,6 +85,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var query = ""
     private var selectionMode = false
     private var marked = Set<Int>()
+    private var pinned: [Pinned] = []
     private var filterGeneration: UInt64 = 0
     private var matches: [UInt32]?
     private var showCreateRows = false
@@ -97,6 +99,38 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     override init() {
         currentPath = UserDefaults.standard.string(forKey: Self.lastDirectoryKey) ?? NSHomeDirectory()
         super.init()
+        NotificationCenter.default.addObserver(self, selector: #selector(pinsChanged), name: Pins.changed, object: nil)
+    }
+
+    @objc private func pinsChanged() {
+        guard case .browse = mode else { return }
+        let path = selectedBrowsePath
+        refreshPins()
+        tableView.reloadData()
+        if let path, let row = (0..<rowCount).first(where: { rowPath($0) == path }) {
+            tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        } else if rowCount > 0 {
+            selectRow(min(max(tableView.selectedRow, 0), rowCount - 1))
+        }
+    }
+
+    private func rowPath(_ index: Int) -> String? {
+        switch row(at: index) {
+        case .pinned(let p)?: return p.path
+        case .entry(let i)?: return listing?.fullPath(at: i)
+        default: return nil
+        }
+    }
+
+    /// Favorites and recents shown above the folder contents; filtered by the query when one is typed.
+    private func refreshPins() {
+        guard case .browse = mode else { pinned = []; return }
+        let base = Pins.rows(excluding: currentPath)
+        if query.isEmpty { pinned = base; return }
+        pinned = base.compactMap { pin -> (Pinned, Int32)? in
+            let score = fse_fuzzy_score(pin.name, query)
+            return score >= 0 ? (pin, score) : nil
+        }.sorted { $0.1 > $1.1 }.map(\.0)
     }
 
     func prepare() {
@@ -297,7 +331,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         let item = DispatchWorkItem { [weak self] in
             guard let self else { return }
             guard let path = self.selectedBrowsePath else { self.clearPreview(); return }
-            if let i = self.selectedEntryIndex, self.isNavigableDirectory(entry: i) {
+            if self.selectedIsFolder {
                 self.showFolderPreview(path)
             } else {
                 self.showFilePreview(URL(fileURLWithPath: path))
@@ -370,9 +404,11 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                 self.selectionMode = false
                 self.marked = []
                 self.hintsBar.hints = self.browseHints
+                Pins.recordVisit(path)
+                self.refreshPins()
                 self.tableView.reloadData()
-                let row = name.flatMap { listing.index(ofName: $0) } ?? 0
-                if listing.count > 0 { self.selectRow(row) }
+                let row = self.pinned.count + (name.flatMap { listing.index(ofName: $0) } ?? 0)
+                if self.rowCount > 0 { self.selectRow(min(row, self.rowCount - 1)) }
                 Perf.report("navigate", since: t0)
             case .failure(let error):
                 self.setStatus("\(self.displayPath(path)): \(error)")
@@ -414,11 +450,12 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private func applyFilter() {
         filterGeneration += 1
         let gen = filterGeneration
+        refreshPins()
         guard let listing, !query.isEmpty else {
             matches = nil
             showCreateRows = false
             tableView.reloadData()
-            if rowCount > 0 { selectRow(0) }
+            if rowCount > 0 { selectRow(min(pinned.count, rowCount - 1)) }
             return
         }
         let q = query
@@ -439,11 +476,13 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private var rowCount: Int {
         let base = matches?.count ?? listing?.count ?? 0
-        return base + (showCreateRows ? 2 : 0)
+        return pinned.count + base + (showCreateRows ? 2 : 0)
     }
 
     private func row(at index: Int) -> Row? {
         guard index >= 0, index < rowCount else { return nil }
+        if index < pinned.count { return .pinned(pinned[index]) }
+        let index = index - pinned.count
         let base = matches?.count ?? listing?.count ?? 0
         if index < base { return .entry(matches.map { Int($0[index]) } ?? index) }
         return index == base ? .createFolder : .createFile
@@ -468,10 +507,24 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         return nil
     }
 
-    /// Filesystem path of the selected browse entry. Nil in picker and rename modes.
+    private var selectedPinned: Pinned? {
+        if case .pinned(let p)? = row(at: tableView.selectedRow) { return p }
+        return nil
+    }
+
+    /// Filesystem path of the selected browse row (entry or pinned folder). Nil in picker and rename modes.
     private var selectedBrowsePath: String? {
-        guard case .browse = mode, let listing, let i = selectedEntryIndex else { return nil }
+        guard case .browse = mode else { return nil }
+        if let p = selectedPinned { return p.path }
+        guard let listing, let i = selectedEntryIndex else { return nil }
         return listing.fullPath(at: i)
+    }
+
+    /// True when the selected browse row is a folder (an entry directory, a dir symlink, or a pinned folder).
+    private var selectedIsFolder: Bool {
+        if selectedPinned != nil { return true }
+        if let i = selectedEntryIndex { return isNavigableDirectory(entry: i) }
+        return false
     }
 
     private func isNavigableDirectory(entry i: Int) -> Bool {
@@ -505,14 +558,14 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             switch mode {
             case .browse where selectionMode: exitSelectionMode()
             case .browse where !query.isEmpty: clearQuery(); applyFilter()
-            case .picker where !query.isEmpty: clearQuery(); applyFilter()
+            case .picker(let picker, _) where !query.isEmpty: clearQuery(); applyFilter(); setStatus("\(picker.listing.count) items")
             case .browse: hide()
             case .picker, .rename: leaveMode()
             }
         case #selector(NSResponder.moveRight(_:)):
             guard case .browse = mode, textView.selectedRange().location == textView.string.utf16.count,
-                  let i = selectedEntryIndex, isNavigableDirectory(entry: i), let listing else { return false }
-            navigate(to: listing.fullPath(at: i))
+                  selectedIsFolder, let path = selectedBrowsePath else { return false }
+            navigate(to: path)
         case #selector(NSResponder.moveLeft(_:)):
             guard case .browse = mode, query.isEmpty else { return false }
             goToParent()
@@ -568,6 +621,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             picker.select(i)
         case (.picker, _), (.rename, _):
             return
+        case (.browse, .pinned(let p)):
+            navigate(to: p.path)
         case (.browse, .entry(let i)):
             let path = listing.fullPath(at: i)
             if isNavigableDirectory(entry: i) {
@@ -600,6 +655,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private func enterPicker(_ picker: Picker) {
         guard let saved = saveBrowseState() else { return }
         mode = .picker(picker, saved: saved)
+        pinned = []
         listing = picker.listing
         pathLabel.stringValue = picker.title
         searchField.placeholderString = picker.placeholder
@@ -618,6 +674,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         }
         mode = .browse
         listing = saved.listing
+        query = saved.query
+        refreshPins()
         pathLabel.stringValue = displayPath(currentPath)
         searchField.placeholderString = Self.browsePlaceholder
         hintsBar.hints = browseHints
@@ -739,7 +797,18 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private func showActions() {
         guard case .browse = mode, let path = selectedBrowsePath else { return }
         let name = URL(fileURLWithPath: path).lastPathComponent
-        let actions: [Action] = [
+        var pinActions: [Action] = []
+        if selectedIsFolder {
+            let isFav = Pins.isFavorite(path)
+            pinActions.append(Action(title: isFav ? "Remove from Favorites" : "Add to Favorites", symbol: isFav ? "star.slash" : "star") {
+                Pins.toggleFavorite(path)
+            })
+        }
+        if let pin = selectedPinned, !pin.isFavorite {
+            pinActions.append(Action(title: "Remove from Recents", symbol: "clock.badge.xmark") { Pins.recents = Pins.recents.filter { $0 != path } })
+            pinActions.append(Action(title: "Clear Recents", symbol: "clock.arrow.circlepath") { Pins.clearRecents() })
+        }
+        let actions: [Action] = pinActions + [
             Action(title: "Open", symbol: "arrow.up.forward.app") { [weak self] in
                 self?.hide(); NSWorkspace.shared.open(URL(fileURLWithPath: path))
             },
@@ -807,6 +876,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         guard let saved = saveBrowseState() else { return }
         let url = URL(fileURLWithPath: target)
         mode = .rename(target: target, saved: saved)
+        pinned = []
         pathLabel.stringValue = "Rename “\(url.lastPathComponent)”"
         hintsBar.hints = [Hint(key: "↵", label: "rename"), Hint(key: "esc", label: "cancel")]
         matches = nil
@@ -824,7 +894,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         let oldName = URL(fileURLWithPath: target).lastPathComponent
         guard !newName.isEmpty, newName != oldName, !newName.contains("/") else { leaveMode(); return }
         leaveMode()
-        run("Rename") { _ = try FileOperations.rename(target, to: newName); return newName }
+        run("Rename") { _ = try FileOperations.rename(target, to: newName); Pins.forget(target); return newName }
     }
 
     // MARK: - File operations
@@ -861,7 +931,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private func trash(_ path: String) {
         let neighbor = neighborName(of: tableView.selectedRow)
-        run("Trash") { try FileOperations.trash(path); return neighbor }
+        run("Trash") { try FileOperations.trash(path); Pins.forget(path); return neighbor }
     }
 
     private func neighborName(of row: Int) -> String? {
@@ -941,6 +1011,10 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         }
         guard let listing, let row = row(at: rowIndex) else { return nil }
         switch row {
+        case .pinned(let pin):
+            let symbol = pin.isFavorite ? "star.fill" : "clock"
+            let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)!
+            cell.configure(name: pin.name, detail: displayPath((pin.path as NSString).deletingLastPathComponent), image: image)
         case .entry(let i):
             let markState: MarkState = selectionMode && { if case .browse = mode { return true } else { return false } }()
                 ? (marked.contains(i) ? .marked : .unmarked) : .hidden

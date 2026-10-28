@@ -102,11 +102,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let updateStatus = NSTextField(labelWithString: "")
     private let checkButton = NSButton(title: "Check Now", target: nil, action: nil)
     private let autoUpdateBox = NSButton(checkboxWithTitle: "Install updates automatically", target: nil, action: nil)
+    private let pinsBox = NSButton(checkboxWithTitle: "Show favorites and recents on top", target: nil, action: nil)
+    private let clearRecentsButton = NSButton(title: "Clear Recents", target: nil, action: nil)
     var onRecordingChanged: ((Bool) -> Void)?
 
     init(updater: Updater) {
         self.updater = updater
-        let size = NSSize(width: 380, height: 300)
+        let size = NSSize(width: 380, height: 360)
         let window = SettingsWindow(contentRect: NSRect(origin: .zero, size: size),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "File Picker Settings"
@@ -176,11 +178,31 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         autoUpdateBox.frame = NSRect(x: 158, y: size.height - 226, width: 210, height: 20)
         content.addSubview(autoUpdateBox)
 
-        let upHint = NSTextField(wrappingLabelWithString: "Checks GitHub Releases every 6 hours. Version \(Updater.currentVersion).")
+        let upHint = NSTextField(wrappingLabelWithString: "Checks GitHub every 6 hours. Version \(Updater.currentVersion).")
         upHint.frame = NSRect(x: 160, y: size.height - 250, width: 200, height: 20)
         upHint.font = .systemFont(ofSize: 11)
         upHint.textColor = .secondaryLabelColor
         content.addSubview(upHint)
+
+        let pinsLabel = NSTextField(labelWithString: "Shortcuts")
+        pinsLabel.frame = NSRect(x: 20, y: size.height - 284, width: 130, height: 20)
+        pinsLabel.alignment = .right
+        content.addSubview(pinsLabel)
+
+        pinsBox.target = self
+        pinsBox.action = #selector(togglePins)
+        pinsBox.controlSize = .small
+        pinsBox.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        pinsBox.frame = NSRect(x: 158, y: size.height - 284, width: 210, height: 20)
+        content.addSubview(pinsBox)
+
+        clearRecentsButton.target = self
+        clearRecentsButton.action = #selector(clearRecents)
+        clearRecentsButton.bezelStyle = .rounded
+        clearRecentsButton.controlSize = .small
+        clearRecentsButton.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        clearRecentsButton.frame = NSRect(x: 158, y: size.height - 312, width: 110, height: 24)
+        content.addSubview(clearRecentsButton)
 
         NotificationCenter.default.addObserver(self, selector: #selector(refreshUpdateStatus), name: Updater.statusChanged, object: nil)
 
@@ -201,6 +223,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         refreshAccessibilityStatus()
         refreshUpdateStatus()
         autoUpdateBox.state = Updater.autoUpdateEnabled ? .on : .off
+        pinsBox.state = Pins.enabled ? .on : .off
         statusTimer?.invalidate()
         statusTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.refreshAccessibilityStatus()
@@ -244,6 +267,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         } else {
             updater.check(userInitiated: true)
         }
+    }
+
+    @objc private func togglePins() {
+        Pins.enabled = pinsBox.state == .on
+    }
+
+    @objc private func clearRecents() {
+        Pins.clearRecents()
     }
 
     @objc private func toggleAutoUpdate() {

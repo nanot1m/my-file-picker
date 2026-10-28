@@ -96,9 +96,16 @@ final class FileCellView: NSTableCellView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func configure(name: String, image: NSImage, secondary: Bool = false, mark state: MarkState = .hidden) {
-        label.stringValue = name
-        label.textColor = secondary ? .secondaryLabelColor : .labelColor
+    func configure(name: String, detail: String? = nil, image: NSImage, secondary: Bool = false, mark state: MarkState = .hidden) {
+        if let detail {
+            let text = NSMutableAttributedString(string: name, attributes: [.font: label.font!, .foregroundColor: NSColor.labelColor])
+            text.append(NSAttributedString(string: "  " + detail, attributes: [
+                .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.tertiaryLabelColor]))
+            label.attributedStringValue = text
+        } else {
+            label.stringValue = name
+            label.textColor = secondary ? .secondaryLabelColor : .labelColor
+        }
         icon.image = image
         mark.isHidden = state == .hidden
         mark.image = state == .marked ? Self.markedImage : Self.unmarkedImage
