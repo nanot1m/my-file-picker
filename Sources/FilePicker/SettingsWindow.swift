@@ -19,18 +19,25 @@ final class ShortcutRecorder: NSView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    override var acceptsFirstResponder: Bool { true }
+    /// Only focusable while recording, so opening the window never arms it by accident.
+    override var acceptsFirstResponder: Bool { isRecording }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var focusRingMaskBounds: NSRect { bounds }
     override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill() }
 
-    override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
+    override func mouseDown(with event: NSEvent) { arm() }
+
+    private func arm() {
+        if isRecording { return }
         isRecording = true
+        if window?.makeFirstResponder(self) != true { isRecording = false }
     }
 
-    override func becomeFirstResponder() -> Bool {
-        isRecording = true
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { "Toggle launcher shortcut, \(shortcut.display)" }
+    override func accessibilityPerformPress() -> Bool {
+        arm()
         return true
     }
 
@@ -65,7 +72,7 @@ final class ShortcutRecorder: NSView {
         path.fill()
         (isRecording ? NSColor.controlAccentColor : NSColor.separatorColor).setStroke()
         path.stroke()
-        let text = isRecording ? "Type shortcut, Esc to cancel" : shortcut.display
+        let text = isRecording ? "Type shortcut, Esc to cancel" : shortcut.display + "  ·  click to change"
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 13, weight: isRecording ? .regular : .medium),
             .foregroundColor: isRecording ? NSColor.secondaryLabelColor : NSColor.labelColor,
@@ -201,7 +208,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window?.center()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
-        window?.makeFirstResponder(recorder)
+        window?.makeFirstResponder(nil)
     }
 
     func showError(_ text: String) {
