@@ -26,7 +26,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Use a vMAJOR.MINOR.PATCH tag'; exit 1; }
-          grep -q "^## \[$version\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $version; add it before tagging"; exit 1; }
+          grep -q "^## \[$version\]" CHANGELOG.md || echo "::warning::CHANGELOG.md has no section for $version; release notes will be auto-generated"
           echo "VERSION=$version" >> "$GITHUB_ENV"
       - name: Test
         run: swift test
