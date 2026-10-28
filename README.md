@@ -13,7 +13,16 @@ Native AppKit UI on top of a small C filesystem engine. No Electron, no web view
 
 ## Install
 
-Requires macOS 13+ on Apple Silicon and the Xcode Command Line Tools (`xcode-select --install`). Xcode itself is not needed.
+Requires macOS 13+ on Apple Silicon.
+
+**Download.** Grab `FilePicker-<version>.zip` from the [latest release](https://github.com/nanot1m/my-file-picker/releases/latest), unzip, and move `FilePicker.app` to `/Applications`. The app is ad-hoc signed, not notarized, so the first launch needs the quarantine flag cleared:
+
+```
+xattr -dr com.apple.quarantine /Applications/FilePicker.app
+open /Applications/FilePicker.app
+```
+
+**Build from source.** Needs the Xcode Command Line Tools (`xcode-select --install`). Xcode itself is not needed.
 
 ```
 git clone https://github.com/nanot1m/my-file-picker.git
@@ -86,6 +95,13 @@ Latencies are also emitted as `os_signpost` events under the `com.hazam.filepick
 make test     # engine tests
 make asan     # AddressSanitizer build
 make bundle   # build the .app without launching
+make dist     # zip + sha256 under build/dist, versioned from the latest git tag
+```
+
+CI runs build, tests, bundle, and a benchmark smoke test on every push and pull request. Pushing a `v*` tag runs the tests, builds the zip, and publishes a GitHub release with generated notes:
+
+```
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
 Roadmap: directory cache with FSEvents invalidation, async per-file icons, incremental delivery for very large folders.
