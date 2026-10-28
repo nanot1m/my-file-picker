@@ -18,8 +18,15 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var browseHints: [Hint] { selectionMode ? Self.selectionHints : Self.browseHints }
     private static let browsePlaceholder = "Search or type a new name"
 
+    private struct PathResult {
+        let path: String
+        let relative: String
+        let isDirectory: Bool
+    }
+
     private enum Row {
         case pinned(Pinned)
+        case pathResult(PathResult)
         case entry(Int)
         case createFolder
         case createFile
@@ -82,7 +89,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var includeHidden = false
 
     private var query = ""
-    private var pendingQuery: String?
+    private var pathResults: [PathResult]?
+    private var pathListingCache: [String: DirectoryListing] = [:]
     private var selectionMode = false
     private var marked = Set<Int>()
     private var pinned: [Pinned] = []
@@ -116,6 +124,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private func rowPath(_ index: Int) -> String? {
         switch row(at: index) {
+        case .pathResult(let r)?: return r.path
         case .pinned(let p)?: return p.path
         case .entry(let i)?: return listing?.fullPath(at: i)
         default: return nil
@@ -126,6 +135,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private func refreshPins() {
         guard case .browse = mode else { pinned = []; return }
         let base = Pins.rows(excluding: currentPath)
+        if query.contains("/") { pinned = []; return }
         if query.isEmpty { pinned = base; return }
         pinned = base.compactMap { pin -> (Pinned, Int32)? in
             let score = fse_fuzzy_score(pin.name, query)
@@ -413,23 +423,14 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                 self.marked = []
                 self.hintsBar.hints = self.browseHints
                 Pins.recordVisit(path)
+                self.pathListingCache = [:]
+                self.pathResults = nil
                 self.refreshPins()
                 self.tableView.reloadData()
                 let row = name.flatMap { listing.index(ofName: $0) }.map { $0 + self.pinned.count } ?? 0
                 if self.rowCount > 0 { self.selectRow(min(row, self.rowCount - 1)) }
                 Perf.report("navigate", since: t0)
-                if let pending = self.pendingQuery {
-                    self.pendingQuery = nil
-                    self.searchField.stringValue = pending
-                    self.query = pending
-                    if pending.contains("/") {
-                        self.applyFilter(completion: { [weak self] in self?.resolvePathSegment() })
-                    } else if !pending.isEmpty {
-                        self.applyFilter()
-                    }
-                }
             case .failure(let error):
-                self.pendingQuery = nil
                 self.setStatus("\(self.displayPath(path)): \(error)")
             }
         }
@@ -463,29 +464,82 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     func controlTextDidChange(_ notification: Notification) {
         if case .rename = mode { return }
         query = searchField.stringValue
-        if case .browse = mode, query.contains("/") { resolvePathSegment() } else { applyFilter() }
+        applyFilter()
     }
 
-    /// "a/b/c": each slash commits the segment before it by descending into the highlighted folder.
-    private func resolvePathSegment() {
-        guard let slash = query.firstIndex(of: "/") else { applyFilter(); return }
-        let head = String(query[..<slash])
-        let rest = String(query[query.index(after: slash)...])
-        let target: String?
-        switch head {
-        case "": target = "/"
-        case "~": target = NSHomeDirectory()
-        case "..": target = currentPath == "/" ? "/" : (currentPath as NSString).deletingLastPathComponent
-        case ".": target = currentPath
-        default: target = selectedIsFolder ? selectedBrowsePath : nil
+    /// "a/b/c" matches each segment against successive folder levels below the base; results keep their relative path.
+    private func runPathSearch(generation gen: UInt64) {
+        var pattern = query
+        var base = currentPath
+        if pattern.hasPrefix("/") { base = "/"; pattern.removeFirst() }
+        else if pattern.hasPrefix("~/") { base = NSHomeDirectory(); pattern.removeFirst(2) }
+        var parts = pattern.components(separatedBy: "/")
+        let last = parts.removeLast()
+        let includeHidden = self.includeHidden
+        let t0 = Perf.now()
+        workQueue.async { [weak self] in
+            guard let self else { return }
+            func load(_ dir: String) -> DirectoryListing? {
+                if let cached = self.pathListingCache[dir] { return cached }
+                guard case .success(let l) = DirectoryListing.read(path: dir, includeHidden: includeHidden) else { return nil }
+                self.pathListingCache[dir] = l
+                return l
+            }
+            func isDir(_ l: DirectoryListing, _ i: Int) -> Bool {
+                if l.isDirectory(at: i) { return true }
+                guard l.isSymlink(at: i) else { return false }
+                var d: ObjCBool = false
+                return FileManager.default.fileExists(atPath: l.fullPath(at: i), isDirectory: &d) && d.boolValue
+            }
+            var candidates: [(dir: String, rel: String)] = [(base, "")]
+            for part in parts {
+                var next: [(String, String)] = []
+                for cand in candidates {
+                    if part == ".." {
+                        let parent = cand.dir == "/" ? "/" : (cand.dir as NSString).deletingLastPathComponent
+                        next.append((parent, cand.rel + "../"))
+                        continue
+                    }
+                    guard let l = load(cand.dir) else { continue }
+                    let indices = part.isEmpty ? (0..<l.count).map(UInt32.init) : l.filter(query: part).indices
+                    var taken = 0
+                    for i in indices where isDir(l, Int(i)) {
+                        next.append((l.fullPath(at: Int(i)), cand.rel + l.name(at: Int(i)) + "/"))
+                        taken += 1
+                        if taken == 6 { break }
+                    }
+                    if next.count >= 24 { break }
+                }
+                candidates = next
+                if candidates.isEmpty { break }
+            }
+            var results: [(PathResult, Int32)] = []
+            for cand in candidates {
+                guard let l = load(cand.dir) else { continue }
+                let indices = last.isEmpty ? (0..<min(l.count, 200)).map(UInt32.init) : l.filter(query: last).indices
+                for i in indices.prefix(200) {
+                    let name = l.name(at: Int(i))
+                    let score = last.isEmpty ? 0 : fse_fuzzy_score(name, last)
+                    results.append((PathResult(path: l.fullPath(at: Int(i)), relative: cand.rel + name, isDirectory: isDir(l, Int(i))), score))
+                }
+            }
+            results.sort { a, b in
+                if a.1 != b.1 { return a.1 > b.1 }
+                if a.0.isDirectory != b.0.isDirectory { return a.0.isDirectory }
+                return a.0.relative.localizedStandardCompare(b.0.relative) == .orderedAscending
+            }
+            let final = results.prefix(300).map(\.0)
+            DispatchQueue.main.async {
+                guard gen == self.filterGeneration else { return }
+                self.pathResults = final
+                self.matches = nil
+                self.showCreateRows = false
+                self.tableView.reloadData()
+                if self.rowCount > 0 { self.selectRow(0) }
+                self.setStatus(final.isEmpty ? "No matches" : "\(final.count) results")
+                Perf.report("pathsearch", since: t0)
+            }
         }
-        guard let target else {
-            setStatus(selectedBrowsePath == nil ? "No folder matches “\(head)”" : "Highlighted item is not a folder")
-            applyFilter()
-            return
-        }
-        pendingQuery = rest
-        navigate(to: target)
     }
 
     private func applyFilter(completion: (() -> Void)? = nil) {
@@ -494,13 +548,16 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         refreshPins()
         guard let listing, !query.isEmpty else {
             matches = nil
+            pathResults = nil
             showCreateRows = false
             tableView.reloadData()
             if rowCount > 0 { selectRow(0) }
             completion?()
             return
         }
-        let q = query.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? query
+        if case .browse = mode, query.contains("/") { runPathSearch(generation: gen); return }
+        pathResults = nil
+        let q = query
         let t0 = Perf.now()
         workQueue.async { [weak self] in
             let (indices, exact) = listing.filter(query: q)
@@ -518,12 +575,14 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     }
 
     private var rowCount: Int {
+        if let pathResults { return pathResults.count }
         let base = matches?.count ?? listing?.count ?? 0
         return pinned.count + base + (showCreateRows ? 2 : 0)
     }
 
     private func row(at index: Int) -> Row? {
         guard index >= 0, index < rowCount else { return nil }
+        if let pathResults { return .pathResult(pathResults[index]) }
         if index < pinned.count { return .pinned(pinned[index]) }
         let index = index - pinned.count
         let base = matches?.count ?? listing?.count ?? 0
@@ -555,9 +614,15 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         return nil
     }
 
+    private var selectedPathResult: PathResult? {
+        if case .pathResult(let r)? = row(at: tableView.selectedRow) { return r }
+        return nil
+    }
+
     /// Filesystem path of the selected browse row (entry or pinned folder). Nil in picker and rename modes.
     private var selectedBrowsePath: String? {
         guard case .browse = mode else { return nil }
+        if let r = selectedPathResult { return r.path }
         if let p = selectedPinned { return p.path }
         guard let listing, let i = selectedEntryIndex else { return nil }
         return listing.fullPath(at: i)
@@ -565,6 +630,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     /// True when the selected browse row is a folder (an entry directory, a dir symlink, or a pinned folder).
     private var selectedIsFolder: Bool {
+        if let r = selectedPathResult { return r.isDirectory }
         if selectedPinned != nil { return true }
         if let i = selectedEntryIndex { return isNavigableDirectory(entry: i) }
         return false
@@ -614,6 +680,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             goToParent()
         case #selector(NSResponder.moveToBeginningOfDocument(_:)):
             guard case .browse = mode else { return false }
+            goToParent()
+        case #selector(NSResponder.deleteBackward(_:)):
+            guard case .browse = mode, query.isEmpty else { return false }
             goToParent()
         default:
             return false
@@ -666,6 +735,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             return
         case (.browse, .pinned(let p)):
             navigate(to: p.path)
+        case (.browse, .pathResult(let r)):
+            if r.isDirectory { navigate(to: r.path) } else { hide(); NSWorkspace.shared.open(URL(fileURLWithPath: r.path)) }
         case (.browse, .entry(let i)):
             let path = listing.fullPath(at: i)
             if isNavigableDirectory(entry: i) {
@@ -1054,6 +1125,10 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         }
         guard let listing, let row = row(at: rowIndex) else { return nil }
         switch row {
+        case .pathResult(let r):
+            let image = r.isDirectory ? folderIcon : fileIcon
+            let parent = (r.relative as NSString).deletingLastPathComponent
+            cell.configure(name: (r.path as NSString).lastPathComponent, detail: parent.isEmpty ? nil : parent, image: image)
         case .pinned(let pin):
             let symbol = pin.isFavorite ? "star.fill" : "clock"
             let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)!

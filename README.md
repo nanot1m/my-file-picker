@@ -32,7 +32,7 @@ make run
 | Key | Action |
 |---|---|
 | ⌥ Space | Show / hide the panel (change it in Settings, ⌘,) |
-| type | Fuzzy-filter the current folder. A `/` enters the highlighted folder: type `de`, check the highlight (move it with ↑↓ if needed), press `/`, repeat for the next level. `/` alone goes to the root, `~/` home, `../` up |
+| type | Fuzzy-filter the current folder. With a `/` the query becomes a path pattern: `de/src/Lau` lists items whose path fuzzy-matches "de", then "src", then "Lau", shown with their relative paths. Leading `/` or `~/` searches from the root or home. Enter opens or enters the result; typing alone never changes folder. `/` alone goes to the root, `~/` home, `../` up |
 | ↑ ↓ | Move selection (Page Up / Page Down jump) |
 | → or Enter | Enter the selected folder |
 | Enter | Open the selected file with its default app |
@@ -42,6 +42,7 @@ make run
 | ⌘P | Toggle a preview column: Quick Look for files, a contents listing for folders (persists) |
 | ← | Go to the parent folder (when the search field is empty) |
 | ⌘↑ | Go to the parent folder, even while a search is typed |
+| ⌫ | Go to the parent folder when the search box is empty |
 | ⌘C | Copy the absolute path |
 | ⌘⇧C | Copy the path relative to home, e.g. `~/dev/project` |
 | ⌘⇧O | Open with an application, picked with fuzzy search |
