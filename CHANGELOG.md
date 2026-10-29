@@ -6,6 +6,8 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-29
+
 ### Added
 - Per-folder sorting, remembered between visits: by name (default) or by date added, newest first. Choose with ⌘⇧S or "Sort This Folder…" in the actions list; the path label shows a non-default sort.
 
@@ -86,7 +88,8 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 - Fuzzy search field with "Create folder" / "Create file" rows for unmatched names.
 - Hints bar, transparent rounded corners, standalone `fsbench` benchmark, engine tests.
 
-[Unreleased]: https://github.com/nanot1m/my-file-picker/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/nanot1m/my-file-picker/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/nanot1m/my-file-picker/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/nanot1m/my-file-picker/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/nanot1m/my-file-picker/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/nanot1m/my-file-picker/compare/v0.3.1...v0.4.0
