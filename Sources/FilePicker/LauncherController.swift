@@ -409,13 +409,14 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private func navigate(to path: String, selecting name: String? = nil) {
         let t0 = Perf.now()
         setStatus("Loading…")
-        loader.load(path, includeHidden: includeHidden) { [weak self] result in
+        let sort = FolderSort.forFolder(path)
+        loader.load(path, includeHidden: includeHidden, sort: sort) { [weak self] result in
             guard let self, case .browse = self.mode else { return }
             switch result {
             case .success(let listing):
                 self.listing = listing
                 self.currentPath = path
-                self.pathLabel.stringValue = self.displayPath(path)
+                self.pathLabel.stringValue = self.pathLabelText(for: path)
                 self.stats = String(format: "%d items · %.2f ms", listing.count, listing.readMilliseconds + listing.sortMilliseconds)
                 self.setStatus(self.stats)
                 self.clearQuery()
@@ -438,6 +439,31 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private func reload(selecting name: String?) {
         navigate(to: currentPath, selecting: name)
+    }
+
+    private func pathLabelText(for path: String) -> String {
+        let sort = FolderSort.forFolder(path)
+        return sort == .name ? displayPath(path) : "\(displayPath(path))  ·  by \(sort.shortTitle)"
+    }
+
+    private func chooseSort() {
+        guard case .browse = mode else { return }
+        let folder = currentPath
+        let current = FolderSort.forFolder(folder)
+        let options = FolderSort.allCases
+        let selectedName = selectedBrowsePath.map { ($0 as NSString).lastPathComponent }
+        enterPicker(Picker(
+            title: "Sort “\((folder as NSString).lastPathComponent)” by",
+            placeholder: "Search sort options",
+            hints: [Hint(key: "↵", label: "apply"), Hint(key: "esc", label: "back")],
+            listing: .synthetic(options.map { $0 == current ? "\($0.title)  ✓" : $0.title }),
+            icon: { NSImage(systemSymbolName: options[$0].symbol, accessibilityDescription: nil)! },
+            select: { [weak self] i in
+                guard let self else { return }
+                self.leaveMode()
+                FolderSort.set(options[i], forFolder: folder)
+                self.navigate(to: folder, selecting: selectedName)
+            }))
     }
 
     private func displayPath(_ path: String) -> String {
@@ -704,6 +730,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             if selectionMode, !marked.isEmpty { showBatchActions() } else { showActions() }
         case Selector(("toggleSelectionMode:")):
             if selectionMode { exitSelectionMode() } else { enterSelectionMode() }
+        case Selector(("chooseSort:")):
+            chooseSort()
         case Selector(("openSettings:")):
             openSettings?()
         case Selector(("togglePreview:")):
@@ -791,7 +819,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         listing = saved.listing
         query = saved.query
         refreshPins()
-        pathLabel.stringValue = displayPath(currentPath)
+        pathLabel.stringValue = pathLabelText(for: currentPath)
         searchField.placeholderString = Self.browsePlaceholder
         hintsBar.hints = browseHints
         filterGeneration += 1
@@ -945,6 +973,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             Action(title: "Copy Path", symbol: "link") { [weak self] in self?.copySelectedPath(homeRelative: false, path: path) },
             Action(title: "Copy ~ Path", symbol: "house") { [weak self] in self?.copySelectedPath(homeRelative: true, path: path) },
             Action(title: "Move to Trash", symbol: "trash") { [weak self] in self?.trash(path) },
+            Action(title: "Sort This Folder…", symbol: "arrow.up.arrow.down") { [weak self] in self?.chooseSort() },
         ]
         let icons = actions.map { NSImage(systemSymbolName: $0.symbol, accessibilityDescription: nil) ?? fileIcon }
         enterPicker(Picker(

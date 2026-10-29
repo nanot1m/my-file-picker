@@ -20,6 +20,7 @@ typedef struct {
     uint16_t flags;      /* FSE_* */
     uint64_t size;
     int64_t  mtime;      /* seconds since epoch */
+    int64_t  added;      /* date added to its folder (Finder "Date Added"), seconds since epoch */
 } fse_entry;
 
 typedef struct {
@@ -34,8 +35,14 @@ typedef struct {
     uint64_t   sort_ns;
 } fse_dir;
 
+enum {
+    FSE_SORT_NAME  = 0,  /* directories first, then natural name order */
+    FSE_SORT_ADDED = 1,  /* directories first, newest "date added" first */
+};
+
 typedef struct {
     int include_hidden;  /* include dotfiles and UF_HIDDEN entries */
+    int sort;            /* FSE_SORT_* */
 } fse_options;
 
 /* Enumerates one directory level. Returns NULL and sets *err to an errno value on failure. */
@@ -46,6 +53,7 @@ void fse_dir_free(fse_dir *d);
 fse_dir *fse_dir_new(void);
 int fse_dir_append(fse_dir *d, const char *name, uint16_t flags); /* returns errno */
 void fse_dir_sort(fse_dir *d);
+void fse_dir_sort_by(fse_dir *d, int sort);
 
 static inline const char *fse_entry_name(const fse_dir *d, uint32_t i) {
     return d->arena + d->entries[i].name_off;

@@ -50,7 +50,7 @@ static int grow_entries(fse_dir *d) {
     return 0;
 }
 
-static int push(fse_dir *d, const char *name, uint32_t len, uint16_t flags, uint64_t size, int64_t mtime) {
+static int push(fse_dir *d, const char *name, uint32_t len, uint16_t flags, uint64_t size, int64_t mtime, int64_t added) {
     if (d->count == d->cap && grow_entries(d)) return ENOMEM;
     if (d->arena_len + len + 1 > d->arena_cap) {
         uint32_t cap = d->arena_cap ? d->arena_cap : 8192;
@@ -66,6 +66,7 @@ static int push(fse_dir *d, const char *name, uint32_t len, uint16_t flags, uint
     e->flags = flags;
     e->size = size;
     e->mtime = mtime;
+    e->added = added;
     memcpy(d->arena + d->arena_len, name, len);
     d->arena[d->arena_len + len] = 0;
     d->arena_len += len + 1;
@@ -78,7 +79,7 @@ static int read_bulk(int fd, fse_dir *d, int include_hidden) {
     memset(&al, 0, sizeof al);
     al.bitmapcount = ATTR_BIT_MAP_COUNT;
     al.commonattr = ATTR_CMN_RETURNED_ATTRS | ATTR_CMN_NAME | ATTR_CMN_OBJTYPE |
-                    ATTR_CMN_MODTIME | ATTR_CMN_FLAGS;
+                    ATTR_CMN_MODTIME | ATTR_CMN_FLAGS | ATTR_CMN_ADDEDTIME;
     al.fileattr = ATTR_FILE_DATALENGTH;
 
     char *buf = malloc(BULK_BUF_SIZE);
@@ -115,6 +116,9 @@ static int read_bulk(int fd, fse_dir *d, int include_hidden) {
             if (ret.commonattr & ATTR_CMN_MODTIME) { struct timespec ts; memcpy(&ts, f, sizeof ts); mtime = ts.tv_sec; f += sizeof ts; }
             uint32_t bsdflags = 0;
             if (ret.commonattr & ATTR_CMN_FLAGS) { memcpy(&bsdflags, f, sizeof bsdflags); f += sizeof bsdflags; }
+            int64_t added = 0;
+            if (ret.commonattr & ATTR_CMN_ADDEDTIME) { struct timespec ts; memcpy(&ts, f, sizeof ts); added = ts.tv_sec; f += sizeof ts; }
+            if (added == 0) added = mtime;
             uint64_t size = 0;
             if (ret.fileattr & ATTR_FILE_DATALENGTH) { off_t sz; memcpy(&sz, f, sizeof sz); size = (uint64_t)sz; f += sizeof sz; }
             p = rec + reclen;
@@ -129,7 +133,7 @@ static int read_bulk(int fd, fse_dir *d, int include_hidden) {
             if (name[0] == '.' || (bsdflags & UF_HIDDEN)) flags |= FSE_HIDDEN;
             if ((flags & FSE_HIDDEN) && !include_hidden) continue;
 
-            if ((rc = push(d, name, namelen, flags, size, mtime))) goto out;
+            if ((rc = push(d, name, namelen, flags, size, mtime, added))) goto out;
         }
     }
 out:
@@ -156,7 +160,7 @@ static int read_readdir(int fd, fse_dir *d, int include_hidden) {
         if ((flags & FSE_HIDDEN) && !include_hidden) continue;
         uint32_t len = (uint32_t)strlen(de->d_name);
         if (len > UINT16_MAX) continue;
-        if ((rc = push(d, de->d_name, len, flags, (uint64_t)st.st_size, st.st_mtimespec.tv_sec))) break;
+        if ((rc = push(d, de->d_name, len, flags, (uint64_t)st.st_size, st.st_mtimespec.tv_sec, st.st_birthtimespec.tv_sec))) break;
     }
     closedir(dir);
     return rc;
@@ -170,8 +174,23 @@ static int compare_entries(void *thunk, const void *pa, const void *pb) {
     return fse_name_compare(d->arena + a->name_off, d->arena + b->name_off);
 }
 
+static int compare_added(void *thunk, const void *pa, const void *pb) {
+    const fse_dir *d = thunk;
+    const fse_entry *a = pa, *b = pb;
+    int da = (a->flags & FSE_DIR) != 0, db = (b->flags & FSE_DIR) != 0;
+    if (da != db) return da ? -1 : 1;
+    if (a->added != b->added) return a->added > b->added ? -1 : 1;
+    return fse_name_compare(d->arena + a->name_off, d->arena + b->name_off);
+}
+
+void fse_dir_sort_by(fse_dir *d, int sort) {
+    if (d->count < 2) return;
+    qsort_r(d->entries, d->count, sizeof *d->entries, d, sort == FSE_SORT_ADDED ? compare_added : compare_entries);
+}
+
 fse_dir *fse_dir_read(const char *path, const fse_options *opts, int *err) {
     int include_hidden = opts ? opts->include_hidden : 0;
+    int sort = opts ? opts->sort : FSE_SORT_NAME;
     int fd = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (fd < 0) { if (err) *err = errno; return NULL; }
 
@@ -189,7 +208,7 @@ fse_dir *fse_dir_read(const char *path, const fse_options *opts, int *err) {
     d->read_ns = fse_now_ns() - t0;
 
     t0 = fse_now_ns();
-    if (d->count > 1) qsort_r(d->entries, d->count, sizeof *d->entries, d, compare_entries);
+    fse_dir_sort_by(d, sort);
     d->sort_ns = fse_now_ns() - t0;
     if (err) *err = 0;
     return d;
@@ -202,7 +221,7 @@ fse_dir *fse_dir_new(void) {
 int fse_dir_append(fse_dir *d, const char *name, uint16_t flags) {
     size_t len = strlen(name);
     if (len == 0 || len > UINT16_MAX) return EINVAL;
-    return push(d, name, (uint32_t)len, flags, 0, 0);
+    return push(d, name, (uint32_t)len, flags, 0, 0, 0);
 }
 
 void fse_dir_sort(fse_dir *d) {

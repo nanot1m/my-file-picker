@@ -38,6 +38,7 @@ make run
 | Enter | Open the selected file with its default app |
 | ⌘ Enter | Actions for the selected item, fuzzy-searchable in the same panel |
 | start page | The panel always opens in your home folder, with favorites (★) and recent folders (🕒) listed above its contents. Typing filters them too. Add or remove favorites and clear recents from the ⌘ Enter actions list, or in Settings, where you can also set how many recents to show |
+| ⌘⇧S | Sort the current folder by name or by date added (newest first); remembered per folder |
 | ⌘S / Tab | Selection mode: Enter marks the current row, Tab marks and moves on, ⇧Tab moves back, ⌘A marks all, Esc leaves. ⌘ Enter then runs an action on every marked item (Open, Open With, Reveal, Duplicate, Copy, Paste into app, Copy paths, Trash) |
 | ⌘P | Toggle a preview column: Quick Look for files, a contents listing for folders (persists) |
 | ← | Go to the parent folder (when the search field is empty) |

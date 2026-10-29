@@ -17,8 +17,8 @@ private struct TempDir {
         try FileManager.default.createSymbolicLink(at: url.appendingPathComponent(name),
                                                    withDestinationURL: url.appendingPathComponent(target))
     }
-    func read(hidden: Bool = false) throws -> UnsafeMutablePointer<fse_dir> {
-        var opts = fse_options(include_hidden: hidden ? 1 : 0)
+    func read(hidden: Bool = false, sort: Int32 = 0) throws -> UnsafeMutablePointer<fse_dir> {
+        var opts = fse_options(include_hidden: hidden ? 1 : 0, sort: sort)
         var err: Int32 = 0
         guard let d = fse_dir_read(url.path, &opts, &err) else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(err)) }
         return d
@@ -123,4 +123,19 @@ private func names(_ d: UnsafeMutablePointer<fse_dir>) -> [String] {
     #expect(ordered.first == "Makefile" || ordered.first == "maker")
     #expect(ordered.last == "some-make-thing")
     #expect(fse_filter(d, "", &out) == 4)
+}
+
+@Test func sortByDateAddedNewestFirst() throws {
+    let t = try TempDir(); defer { t.cleanup() }
+    try t.touch("older.txt")
+    try t.mkdir("zdir")
+    try t.touch("newer.txt")
+    let d = try t.read(sort: 1); defer { fse_dir_free(d) }
+    let order = names(d)
+    #expect(order.first == "zdir")
+    let added = (0..<Int(d.pointee.count)).map { d.pointee.entries[$0].added }
+    #expect(added.allSatisfy { $0 > 0 })
+    #expect(added[1] >= added[2])
+    let byName = try t.read(sort: 0); defer { fse_dir_free(byName) }
+    #expect(names(byName) == ["zdir", "newer.txt", "older.txt"])
 }

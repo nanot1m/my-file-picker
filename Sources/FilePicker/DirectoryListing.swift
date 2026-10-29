@@ -1,6 +1,35 @@
 import FSEngine
 import Foundation
 
+enum FolderSort: Int32, CaseIterable {
+    case name = 0
+    case dateAdded = 1
+
+    var title: String {
+        switch self {
+        case .name: return "Name"
+        case .dateAdded: return "Date Added (newest first)"
+        }
+    }
+
+    var shortTitle: String { self == .name ? "name" : "date added" }
+    var symbol: String { self == .name ? "textformat.abc" : "calendar.badge.plus" }
+
+    private static let key = "folderSorts"
+
+    /// Per-folder preference; folders without one sort by name.
+    static func forFolder(_ path: String) -> FolderSort {
+        let table = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
+        return table[path].flatMap { FolderSort(rawValue: Int32($0)) } ?? .name
+    }
+
+    static func set(_ sort: FolderSort, forFolder path: String) {
+        var table = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
+        if sort == .name { table.removeValue(forKey: path) } else { table[path] = Int(sort.rawValue) }
+        UserDefaults.standard.set(table, forKey: key)
+    }
+}
+
 final class DirectoryListing {
     let path: String
     private let dir: UnsafeMutablePointer<fse_dir>
@@ -12,8 +41,8 @@ final class DirectoryListing {
 
     deinit { fse_dir_free(dir) }
 
-    static func read(path: String, includeHidden: Bool) -> Result<DirectoryListing, DirectoryError> {
-        var opts = fse_options(include_hidden: includeHidden ? 1 : 0)
+    static func read(path: String, includeHidden: Bool, sort: FolderSort = .name) -> Result<DirectoryListing, DirectoryError> {
+        var opts = fse_options(include_hidden: includeHidden ? 1 : 0, sort: sort.rawValue)
         var err: Int32 = 0
         guard let dir = fse_dir_read(path, &opts, &err) else {
             return .failure(DirectoryError(code: err))
@@ -80,12 +109,12 @@ final class DirectoryLoader {
 
     /// Must be called on the main thread. Results for superseded requests are dropped.
     @discardableResult
-    func load(_ path: String, includeHidden: Bool,
+    func load(_ path: String, includeHidden: Bool, sort: FolderSort = .name,
               completion: @escaping (Result<DirectoryListing, DirectoryError>) -> Void) -> UInt64 {
         generation += 1
         let gen = generation
         queue.async {
-            let result = DirectoryListing.read(path: path, includeHidden: includeHidden)
+            let result = DirectoryListing.read(path: path, includeHidden: includeHidden, sort: sort)
             DispatchQueue.main.async { [self] in
                 guard gen == generation else { return }
                 completion(result)
@@ -119,7 +148,7 @@ struct ApplicationList {
     /// Blocking; run off the main thread.
     static func scan() -> ApplicationList {
         var named: [(name: String, path: String)] = []
-        var opts = fse_options(include_hidden: 0)
+        var opts = fse_options(include_hidden: 0, sort: 0)
         for root in searchRoots {
             var err: Int32 = 0
             guard let d = fse_dir_read(root, &opts, &err) else { continue }

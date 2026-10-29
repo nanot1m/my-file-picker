@@ -35,6 +35,7 @@ final class LauncherPanel: NSPanel {
         case (0x02, [.command]): selector = Selector(("duplicateSelection:"))
         case (0x2B, [.command]): selector = Selector(("openSettings:"))
         case (0x01, [.command]): selector = Selector(("toggleSelectionMode:"))
+        case (0x01, [.command, .shift]): selector = Selector(("chooseSort:"))
         case (0x23, [.command]): selector = Selector(("togglePreview:"))
         case (0x09, [.command]): selector = #selector(NSText.paste(_:))
         case (0x09, [.command, .shift]): selector = Selector(("pasteIntoPreviousApp:"))

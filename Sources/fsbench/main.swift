@@ -30,7 +30,7 @@ let iterations = args.count >= 3 ? Int(args[2]) ?? 5 : 5
 let hidden = args.contains("--hidden")
 let baseline = args.contains("--baseline")
 
-var opts = fse_options(include_hidden: hidden ? 1 : 0)
+var opts = fse_options(include_hidden: hidden ? 1 : 0, sort: 0)
 var samples: [Double] = []
 var count: UInt32 = 0
 var memory = 0

@@ -6,6 +6,9 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 
 ## [Unreleased]
 
+### Added
+- Per-folder sorting, remembered between visits: by name (default) or by date added, newest first. Choose with ⌘⇧S or "Sort This Folder…" in the actions list; the path label shows a non-default sort.
+
 ## [0.6.0] - 2026-10-28
 
 ### Added
