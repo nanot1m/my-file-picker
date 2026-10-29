@@ -93,7 +93,14 @@ fi
 log "accepted"
 endgroup
 group "Staple and package"
-xcrun stapler staple "$APP_PATH"
+# Stapling fetches the ticket from Apple's CDN, which occasionally drops the connection; retry before giving up.
+stapled=0
+for attempt in 1 2 3 4 5 6; do
+  if xcrun stapler staple "$APP_PATH"; then stapled=1; break; fi
+  log "staple attempt $attempt failed; retrying in 20s"
+  sleep 20
+done
+[[ $stapled == 1 ]] || { log "stapling failed after retries"; exit 1; }
 xcrun stapler validate "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 spctl --assess --type execute --verbose=2 "$APP_PATH"
