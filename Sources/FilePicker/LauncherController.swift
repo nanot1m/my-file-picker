@@ -199,15 +199,28 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         panel = LauncherPanel(contentRect: NSRect(origin: .zero, size: Self.listSize))
         panel.delegate = self
         panel.onCommand = { [weak self] selector in self?.handleCommand(selector) ?? false }
+        panel.isHotKeyEvent = { Settings.hotKey.matches($0) }
 
         let w = Self.listSize.width, h = Self.listSize.height
-        let effect = NSVisualEffectView(frame: NSRect(origin: .zero, size: Self.listSize))
-        effect.material = .popover
-        effect.blendingMode = .behindWindow
-        effect.state = .active
-        effect.maskImage = Masks.roundedRect(radius: 12)
+        let effect = NSView(frame: NSRect(origin: .zero, size: Self.listSize))
         effect.autoresizingMask = [.width, .height]
-        panel.contentView = effect
+        if #available(macOS 26, *) {
+            let glass = NSGlassEffectView(frame: NSRect(origin: .zero, size: Self.listSize))
+            glass.cornerRadius = 12
+            glass.style = .regular
+            glass.contentView = effect
+            glass.autoresizingMask = [.width, .height]
+            panel.contentView = glass
+        } else {
+            let blur = NSVisualEffectView(frame: NSRect(origin: .zero, size: Self.listSize))
+            blur.material = .popover
+            blur.blendingMode = .behindWindow
+            blur.state = .active
+            blur.maskImage = Masks.roundedRect(radius: 12)
+            blur.autoresizingMask = [.width, .height]
+            blur.addSubview(effect)
+            panel.contentView = blur
+        }
 
         pathLabel.frame = NSRect(x: 16, y: h - 26, width: w - 32, height: 16)
         pathLabel.font = .systemFont(ofSize: 11, weight: .medium)

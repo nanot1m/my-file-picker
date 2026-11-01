@@ -2,6 +2,13 @@ import AppKit
 
 final class LauncherPanel: NSPanel {
     var onCommand: ((Selector) -> Bool)?
+    /// The toggle hotkey's key-down can reach the panel as it appears (⌥Space types a non-breaking space); drop it.
+    var isHotKeyEvent: ((NSEvent) -> Bool)?
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, isHotKeyEvent?(event) == true { return }
+        super.sendEvent(event)
+    }
 
     init(contentRect: NSRect) {
         super.init(contentRect: contentRect,

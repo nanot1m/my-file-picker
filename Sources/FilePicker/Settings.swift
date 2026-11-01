@@ -25,6 +25,10 @@ struct HotKeySetting: Equatable {
 
     var hasModifiers: Bool { carbonModifiers != 0 }
 
+    func matches(_ event: NSEvent) -> Bool {
+        UInt32(event.keyCode) == keyCode && HotKeySetting(event: event).carbonModifiers == carbonModifiers
+    }
+
     var display: String {
         var s = ""
         if carbonModifiers & UInt32(controlKey) != 0 { s += "⌃" }
