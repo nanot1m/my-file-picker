@@ -146,8 +146,9 @@ final class HintsBar: NSView {
     private var statusWidth: CGFloat { bounds.width < 500 ? 80 : 130 }
     private let keyFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
     private let labelFont = NSFont.systemFont(ofSize: 11.5)
-    private let gap: CGFloat = 12
-    private let keyPad: CGFloat = 5
+    private let gap: CGFloat = 18
+    private let keyPad: CGFloat = 6
+    private let labelGap: CGFloat = 6
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -178,18 +179,19 @@ final class HintsBar: NSView {
         let midY = bounds.midY
         for hint in hints {
             let ks = keySize(hint.key)
-            let ls = hint.label.size(withAttributes: [.font: labelFont])
-            let total = ks.width + 5 + ceil(ls.width)
+            let lw = ceil(hint.label.size(withAttributes: [.font: labelFont]).width)
+            let total = ks.width + labelGap + lw
             if x + total > limit { break }
             let keyRect = NSRect(x: x, y: midY - ks.height / 2, width: ks.width, height: ks.height)
-            let path = NSBezierPath(roundedRect: keyRect, xRadius: 4, yRadius: 4)
+            let path = NSBezierPath(roundedRect: keyRect.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
             NSColor.quaternaryLabelColor.setFill()
             path.fill()
             NSColor.separatorColor.setStroke()
             path.stroke()
-            hint.key.draw(at: NSPoint(x: x + keyPad, y: midY - ks.height / 2 + 3),
+            // Center each font's cap height on midY: text box bottom = midY - capHeight/2 + descender (descender is negative).
+            hint.key.draw(at: NSPoint(x: x + keyPad, y: midY - keyFont.capHeight / 2 + keyFont.descender),
                           withAttributes: [.font: keyFont, .foregroundColor: NSColor.labelColor])
-            hint.label.draw(at: NSPoint(x: x + ks.width + 5, y: midY - ls.height / 2),
+            hint.label.draw(at: NSPoint(x: x + ks.width + labelGap, y: midY - labelFont.capHeight / 2 + labelFont.descender),
                             withAttributes: [.font: labelFont, .foregroundColor: NSColor.secondaryLabelColor])
             x += total + gap
         }

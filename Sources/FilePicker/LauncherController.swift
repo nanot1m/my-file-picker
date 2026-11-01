@@ -205,13 +205,22 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         let effect = NSView(frame: NSRect(origin: .zero, size: Self.listSize))
         effect.autoresizingMask = [.width, .height]
         if #available(macOS 26, *) {
-            let glass = NSGlassEffectView(frame: NSRect(origin: .zero, size: Self.listSize))
-            glass.cornerRadius = 12
-            glass.style = .clear
-            glass.tintColor = NSColor.windowBackgroundColor.withAlphaComponent(0.72)
-            glass.contentView = effect
+            // The glass rim is drawn at the view's edge; oversize the glass and clip it with a rounded mask so the rim falls outside.
+            let bleed: CGFloat = 4
+            let host = NSView(frame: NSRect(origin: .zero, size: Self.listSize))
+            host.wantsLayer = true
+            host.layer?.cornerRadius = 12
+            host.layer?.cornerCurve = .continuous
+            host.layer?.masksToBounds = true
+            host.autoresizingMask = [.width, .height]
+            let glass = NSGlassEffectView(frame: host.bounds.insetBy(dx: -bleed, dy: -bleed))
+            glass.cornerRadius = 12 + bleed
+            glass.style = .regular
             glass.autoresizingMask = [.width, .height]
-            panel.contentView = glass
+            // Content stays a sibling: NSGlassEffectView stretches its contentView to its own (oversized) bounds.
+            host.addSubview(glass)
+            host.addSubview(effect)
+            panel.contentView = host
         } else {
             let blur = NSVisualEffectView(frame: NSRect(origin: .zero, size: Self.listSize))
             blur.material = .popover
@@ -283,6 +292,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         folderPreviewTable.delegate = self
         folderPreviewScroll.frame = NSRect(x: w + 1, y: 31, width: Self.previewWidth - 1, height: h - 34 - 31)
         folderPreviewScroll.hasVerticalScroller = true
+        folderPreviewScroll.scrollerStyle = .overlay
         folderPreviewScroll.drawsBackground = false
         folderPreviewScroll.documentView = folderPreviewTable
         folderPreviewScroll.isHidden = true
@@ -318,6 +328,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         scrollView.frame = NSRect(x: 0, y: 31, width: w, height: h - 101)
         scrollView.autoresizingMask = [.height]
         scrollView.hasVerticalScroller = true
+        scrollView.scrollerStyle = .overlay
         scrollView.drawsBackground = false
         scrollView.documentView = tableView
         column.width = scrollView.contentSize.width
