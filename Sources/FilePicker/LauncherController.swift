@@ -207,7 +207,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         if #available(macOS 26, *) {
             let glass = NSGlassEffectView(frame: NSRect(origin: .zero, size: Self.listSize))
             glass.cornerRadius = 12
-            glass.style = .regular
+            glass.style = .clear
+            glass.tintColor = NSColor.windowBackgroundColor.withAlphaComponent(0.72)
             glass.contentView = effect
             glass.autoresizingMask = [.width, .height]
             panel.contentView = glass

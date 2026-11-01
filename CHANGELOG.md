@@ -7,7 +7,7 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 ## [Unreleased]
 
 ### Changed
-- The panel uses the native Liquid Glass material on macOS 26 and later; earlier systems keep the blurred popover material.
+- The panel uses the native Liquid Glass material (clear style with a translucent system tint) on macOS 26 and later; earlier systems keep the blurred popover material.
 
 ### Fixed
 - The toggle hotkey's keystroke could land in the search field as an invisible non-breaking space, leaving a stale "0 of N" status.
