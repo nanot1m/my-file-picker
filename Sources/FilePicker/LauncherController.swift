@@ -213,12 +213,14 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             host.layer?.cornerCurve = .continuous
             host.layer?.masksToBounds = true
             host.autoresizingMask = [.width, .height]
-            let glass = NSGlassEffectView(frame: host.bounds.insetBy(dx: -bleed, dy: -bleed))
-            glass.cornerRadius = 12 + bleed
-            glass.style = .regular
-            glass.autoresizingMask = [.width, .height]
+            // Resolved by name so the code also compiles against SDKs older than macOS 26.
+            let glassClass = NSClassFromString("NSGlassEffectView") as? NSView.Type
+            let glass = glassClass?.init(frame: host.bounds.insetBy(dx: -bleed, dy: -bleed))
+            glass?.setValue(12 + bleed, forKey: "cornerRadius")
+            glass?.setValue(0, forKey: "style")
+            glass?.autoresizingMask = [.width, .height]
             // Content stays a sibling: NSGlassEffectView stretches its contentView to its own (oversized) bounds.
-            host.addSubview(glass)
+            if let glass { host.addSubview(glass) }
             host.addSubview(effect)
             panel.contentView = host
         } else {

@@ -6,7 +6,7 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 
 ## [Unreleased]
 
-## [0.8.0] - 2026-11-01
+## [0.8.1] - 2026-11-01
 
 ### Changed
 - The panel uses the native Liquid Glass material on macOS 26 and later, with its edge rim clipped; earlier systems keep the blurred popover material.
@@ -98,8 +98,8 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 - Fuzzy search field with "Create folder" / "Create file" rows for unmatched names.
 - Hints bar, transparent rounded corners, standalone `fsbench` benchmark, engine tests.
 
-[Unreleased]: https://github.com/nanot1m/my-file-picker/compare/v0.8.0...HEAD
-[0.8.0]: https://github.com/nanot1m/my-file-picker/compare/v0.7.0...v0.8.0
+[Unreleased]: https://github.com/nanot1m/my-file-picker/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/nanot1m/my-file-picker/compare/v0.7.0...v0.8.1
 [0.7.0]: https://github.com/nanot1m/my-file-picker/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/nanot1m/my-file-picker/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/nanot1m/my-file-picker/compare/v0.4.0...v0.5.0
