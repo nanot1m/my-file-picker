@@ -1,0 +1,4 @@
+{
+  "C_Cpp.default.includePath": ["${workspaceFolder}/Sources/FSEngine/include"],
+  "files.associations": { "fsengine.h": "c" }
+}
