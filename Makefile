@@ -5,7 +5,7 @@ DIST := build/dist/FilePicker-$(VERSION).zip
 # A stable identity keeps Accessibility grants across rebuilds; "-" (ad-hoc) changes every build.
 CODESIGN_IDENTITY ?= $(shell security find-identity -v -p codesigning 2>/dev/null | grep -q "Local Dev" && echo "Local Dev" || echo -)
 
-.PHONY: build bundle run stop test bench asan tsan dist icon clean
+.PHONY: build bundle run stop test bench asan tsan dist icon compiledb clean
 
 build:
 	swift build -c release
@@ -52,6 +52,15 @@ icon:
 	done
 	iconutil -c icns build/AppIcon.iconset -o Resources/AppIcon.icns
 	sips -z 512 512 build/icon-1024.png --out docs/icon.png >/dev/null
+
+compiledb:
+	@SDK=$$(xcrun --show-sdk-path); ROOT=$$(pwd); \
+	printf '[\n' > compile_commands.json; \
+	first=1; for f in Sources/FSEngine/*.c; do \
+	  [ $$first = 1 ] || printf ',\n' >> compile_commands.json; first=0; \
+	  printf '  {"directory": "%s", "file": "%s/%s", "arguments": ["clang", "-std=c11", "-isysroot", "%s", "-I%s/Sources/FSEngine/include", "-c", "%s/%s"]}' \
+	    "$$ROOT" "$$ROOT" "$$f" "$$SDK" "$$ROOT" "$$ROOT" "$$f" >> compile_commands.json; \
+	done; printf '\n]\n' >> compile_commands.json; echo "wrote compile_commands.json"
 
 clean:
 	rm -rf .build build

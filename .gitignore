@@ -7,3 +7,4 @@ build/
 *.p12
 *.p8
 *.keychain-db
+compile_commands.json
