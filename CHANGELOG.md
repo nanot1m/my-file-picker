@@ -6,6 +6,9 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 
 ## [Unreleased]
 
+### Changed
+- Preview of text files larger than 1 MB shows only the first 1,000 lines, read from the first megabyte on a background queue, instead of handing the whole file to Quick Look.
+
 ## [0.8.1] - 2026-11-01
 
 ### Changed

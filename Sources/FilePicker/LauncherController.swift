@@ -1,6 +1,7 @@
 import AppKit
 import FSEngine
 import Quartz
+import UniformTypeIdentifiers
 
 final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     private static let listSize = NSSize(width: 680, height: 460)
@@ -77,6 +78,11 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private let folderPreviewCaption = NSTextField(labelWithString: "")
     private let previewLoader = DirectoryLoader()
     private var folderPreview: DirectoryListing?
+    private let textPreviewScroll = NSScrollView()
+    private let textPreview = NSTextView()
+    private var textPreviewPath: String?
+    private static let largeTextThreshold = 1 << 20
+    private static let previewLineLimit = 1000
     private var previewEnabled = UserDefaults.standard.bool(forKey: previewKey)
     private var previewUpdate: DispatchWorkItem?
 
@@ -298,6 +304,26 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         folderPreviewScroll.drawsBackground = false
         folderPreviewScroll.documentView = folderPreviewTable
         folderPreviewScroll.isHidden = true
+
+        textPreview.isEditable = false
+        textPreview.isSelectable = true
+        textPreview.drawsBackground = false
+        textPreview.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        textPreview.textColor = .labelColor
+        textPreview.textContainerInset = NSSize(width: 8, height: 6)
+        textPreview.isHorizontallyResizable = false
+        textPreview.isVerticallyResizable = true
+        textPreview.autoresizingMask = [.width]
+        textPreview.textContainer?.widthTracksTextView = true
+        textPreview.textContainer?.lineBreakMode = .byCharWrapping
+        textPreviewScroll.frame = folderPreviewScroll.frame
+        textPreviewScroll.hasVerticalScroller = true
+        textPreviewScroll.scrollerStyle = .overlay
+        textPreviewScroll.drawsBackground = false
+        textPreviewScroll.documentView = textPreview
+        textPreviewScroll.isHidden = true
+        textPreview.frame = NSRect(origin: .zero, size: textPreviewScroll.contentSize)
+        effect.addSubview(textPreviewScroll)
         previewColumn.width = folderPreviewScroll.contentSize.width
         folderPreviewTable.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         folderPreviewTable.sizeLastColumnToFit()
@@ -362,6 +388,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         previewView.frame = NSRect(x: listWidth + 1, y: 0, width: Self.previewWidth - 1, height: h)
         folderPreviewCaption.frame.origin.x = listWidth + 13
         folderPreviewScroll.frame.origin.x = listWidth + 1
+        textPreviewScroll.frame.origin.x = listWidth + 1
         if previewEnabled { schedulePreviewUpdate(delay: 0) } else { clearPreview() }
     }
 
@@ -398,18 +425,81 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         folderPreviewTable.reloadData()
         folderPreviewScroll.isHidden = true
         folderPreviewCaption.isHidden = true
+        textPreviewScroll.isHidden = true
+        textPreviewPath = nil
     }
 
     private func showFilePreview(_ url: URL) {
         folderPreviewScroll.isHidden = true
+        if Self.isLargeTextFile(url) {
+            showTextPreview(url)
+            return
+        }
+        textPreviewScroll.isHidden = true
+        textPreviewPath = nil
         folderPreviewCaption.isHidden = true
         previewView.isHidden = false
         if (previewView.previewItem as? URL) != url { previewView.previewItem = url as QLPreviewItem }
     }
 
+    /// Quick Look loads whole text files; above the threshold we show only the head ourselves.
+    private static func isLargeTextFile(_ url: URL) -> Bool {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attrs[.size] as? Int, size > largeTextThreshold else { return false }
+        if let type = UTType(filenameExtension: url.pathExtension) {
+            if type.conforms(to: .text) || type.conforms(to: .sourceCode) || type.conforms(to: .json) || type.conforms(to: .xml) || type.conforms(to: .log) { return true }
+            if type.conforms(to: .image) || type.conforms(to: .audiovisualContent) || type.conforms(to: .archive) || type.conforms(to: .pdf) { return false }
+        }
+        guard let handle = try? FileHandle(forReadingFrom: url), let head = try? handle.read(upToCount: 4096) else { return false }
+        try? handle.close()
+        return !head.isEmpty && !head.contains(0)
+    }
+
+    private func showTextPreview(_ url: URL) {
+        previewView.isHidden = true
+        previewView.previewItem = nil
+        textPreviewScroll.isHidden = false
+        folderPreviewCaption.isHidden = false
+        guard textPreviewPath != url.path else { return }
+        textPreviewPath = url.path
+        textPreview.string = ""
+        folderPreviewCaption.stringValue = "Loading…"
+        let limit = Self.previewLineLimit, chunk = Self.largeTextThreshold
+        let t0 = Perf.now()
+        workQueue.async { [weak self] in
+            var text = ""
+            var lines = 0
+            var sizeText = ""
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path), let size = attrs[.size] as? Int64 {
+                sizeText = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+            }
+            if let handle = try? FileHandle(forReadingFrom: url), let data = try? handle.read(upToCount: chunk) {
+                try? handle.close()
+                let decoded = String(decoding: data, as: UTF8.self)
+                var out = Substring(decoded)
+                var kept: [Substring] = []
+                while lines < limit, let nl = out.firstIndex(of: "\n") {
+                    kept.append(out[..<nl]); lines += 1
+                    out = out[out.index(after: nl)...]
+                }
+                if lines < limit, !out.isEmpty { kept.append(out); lines += 1 }
+                text = kept.joined(separator: "\n")
+            }
+            DispatchQueue.main.async {
+                guard let self, self.textPreviewPath == url.path else { return }
+                self.textPreview.string = text
+                self.textPreview.scrollToBeginningOfDocument(nil)
+                self.folderPreviewCaption.stringValue = "First \(lines) lines of \(sizeText)"
+                Perf.report("preview.text", since: t0)
+            }
+        }
+    }
+
     private func showFolderPreview(_ path: String) {
         previewView.isHidden = true
         previewView.previewItem = nil
+        textPreviewScroll.isHidden = true
+        textPreviewPath = nil
         folderPreviewScroll.isHidden = false
         folderPreviewCaption.isHidden = false
         if folderPreview?.path != path {
