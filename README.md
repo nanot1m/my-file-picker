@@ -8,7 +8,7 @@ Native AppKit UI on top of a small C filesystem engine. No Electron, no web view
 - Create a folder or file by typing a name that doesn't exist yet
 - Open with any application, picked with the same fuzzy search
 - Copy absolute or `~/`-relative paths
-- Menu-bar agent, no Dock icon, one reusable floating panel that always opens on a home start page with your favorites and recent folders
+- Menu-bar agent, no Dock icon, one reusable floating panel that always opens on a start page with Recents, Applications, iCloud Drive and your favorite folders
 - Directory enumeration via `getattrlistbulk()`, off the main thread, ~40 bytes per entry
 
 ## Install
@@ -37,7 +37,7 @@ make run
 | → or Enter | Enter the selected folder |
 | Enter | Open the selected file with its default app |
 | ⌘ Enter | Actions for the selected item, fuzzy-searchable in the same panel |
-| start page | The panel always opens in your home folder, with favorites (★) and recent folders (🕒) listed above its contents. Typing filters favorites too; recents show only while the search box is empty. Add or remove favorites and clear recents from the ⌘ Enter actions list, or in Settings, where you can also set how many recents to show |
+| start page | The panel always opens in your home folder. At the top: Recents (files by last-used date, like Finder), Applications, iCloud Drive, then your favorite folders (★), a separator, and the home folder contents. Typing filters favorites too. Add or remove favorites from the ⌘ Enter actions list; hide them in Settings |
 | ⌘⇧S | Sort the current folder by name or by date added (newest first); remembered per folder |
 | ⌘S / Tab | Selection mode: Enter marks the current row, Tab marks and moves on, ⇧Tab moves back, ⌘A marks all, Esc leaves. ⌘ Enter then runs an action on every marked item (Open, Open With, Reveal, Duplicate, Copy, Paste into app, Copy paths, Trash) |
 | ⌘P | Toggle a preview column: Quick Look for files, a contents listing for folders (persists) |

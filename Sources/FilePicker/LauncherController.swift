@@ -27,6 +27,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private enum Row {
         case pinned(Pinned)
+        case separator
         case pathResult(PathResult)
         case entry(Int)
         case createFolder
@@ -100,6 +101,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var selectionMode = false
     private var marked = Set<Int>()
     private var pinned: [Pinned] = []
+    private var virtualPaths: [String]?
     private var filterGeneration: UInt64 = 0
     private var matches: [UInt32]?
     private var showCreateRows = false
@@ -132,19 +134,26 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         switch row(at: index) {
         case .pathResult(let r)?: return r.path
         case .pinned(let p)?: return p.path
-        case .entry(let i)?: return listing?.fullPath(at: i)
+        case .entry(let i)?: return entryPath(i)
         default: return nil
         }
     }
 
-    /// Favorites and recents shown above the folder contents; filtered by the query when one is typed.
+    /// Real filesystem path of a browse entry, also for virtual listings (Recents, Applications).
+    private func entryPath(_ i: Int) -> String {
+        if let virtualPaths, i < virtualPaths.count { return virtualPaths[i] }
+        return listing?.fullPath(at: i) ?? ""
+    }
+
+    private var separatorCount: Int { pinned.isEmpty || pathResults != nil ? 0 : 1 }
+
+    /// Favorites shown above the home folder contents; filtered by the query when one is typed.
     private func refreshPins() {
         guard case .browse = mode else { pinned = []; return }
         let base = Pins.rows(excluding: currentPath)
         if query.contains("/") { pinned = []; return }
         if query.isEmpty { pinned = base; return }
-        // Recents only decorate the empty start page; search results list favorites and folder contents.
-        pinned = base.filter(\.isFavorite).compactMap { pin -> (Pinned, Int32)? in
+        pinned = base.compactMap { pin -> (Pinned, Int32)? in
             let score = fse_fuzzy_score(pin.name, query)
             return score >= 0 ? (pin, score) : nil
         }.sorted { $0.1 > $1.1 }.map(\.0)
@@ -404,7 +413,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         guard previewEnabled else { return }
         let item = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            guard let path = self.selectedBrowsePath else { self.clearPreview(); return }
+            guard let path = self.selectedBrowsePath, !Pins.isVirtual(path) else { self.clearPreview(); return }
             if self.selectedIsFolder {
                 self.showFolderPreview(path)
             } else {
@@ -432,6 +441,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private func showFilePreview(_ url: URL) {
         folderPreviewScroll.isHidden = true
+        // Quick Look on an app bundle trips macOS App Management protection; show nothing instead.
+        if url.pathExtension == "app" { clearPreview(); return }
         if Self.isLargeTextFile(url) {
             showTextPreview(url)
             return
@@ -525,6 +536,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     // MARK: - Navigation
 
     private func navigate(to path: String, selecting name: String? = nil) {
+        if Pins.isVirtual(path) { navigateVirtual(path); return }
         let t0 = Perf.now()
         setStatus("Loading…")
         let sort = FolderSort.forFolder(path)
@@ -533,6 +545,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             switch result {
             case .success(let listing):
                 self.listing = listing
+                self.virtualPaths = nil
                 self.currentPath = path
                 self.pathLabel.stringValue = self.pathLabelText(for: path)
                 self.stats = String(format: "%d items · %.2f ms", listing.count, listing.readMilliseconds + listing.sortMilliseconds)
@@ -541,12 +554,11 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                 self.selectionMode = false
                 self.marked = []
                 self.hintsBar.hints = self.browseHints
-                Pins.recordVisit(path)
                 self.pathListingCache = [:]
                 self.pathResults = nil
                 self.refreshPins()
                 self.tableView.reloadData()
-                let row = name.flatMap { listing.index(ofName: $0) }.map { $0 + self.pinned.count } ?? 0
+                let row = name.flatMap { listing.index(ofName: $0) }.map { $0 + self.pinned.count + self.separatorCount } ?? 0
                 if self.rowCount > 0 { self.selectRow(min(row, self.rowCount - 1)) }
                 Perf.report("navigate", since: t0)
             case .failure(let error):
@@ -555,9 +567,37 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         }
     }
 
+    private func navigateVirtual(_ path: String) {
+        guard case .browse = mode else { return }
+        setStatus("Loading…")
+        let t0 = Perf.now()
+        let apply: (VirtualListing) -> Void = { [weak self] virtual in
+            guard let self, case .browse = self.mode else { return }
+            Perf.report("virtual.load", since: t0)
+            self.listing = virtual.listing
+            self.virtualPaths = virtual.paths
+            self.currentPath = path
+            self.pathLabel.stringValue = self.displayPath(path)
+            self.stats = "\(virtual.listing.count) items"
+            self.setStatus(self.stats)
+            self.clearQuery()
+            self.selectionMode = false
+            self.marked = []
+            self.hintsBar.hints = self.browseHints
+            self.pathListingCache = [:]
+            self.pathResults = nil
+            self.refreshPins()
+            self.tableView.reloadData()
+            if self.rowCount > 0 { self.selectRow(0) }
+        }
+        if path == Pins.recentsPath { VirtualFolders.recents(completion: apply) } else { VirtualFolders.applications(completion: apply) }
+    }
+
     private func reload(selecting name: String?) {
         navigate(to: currentPath, selecting: name)
     }
+
+    private var isVirtualFolder: Bool { Pins.isVirtual(currentPath) }
 
     private func pathLabelText(for path: String) -> String {
         let sort = FolderSort.forFolder(path)
@@ -565,7 +605,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     }
 
     private func chooseSort() {
-        guard case .browse = mode else { return }
+        guard case .browse = mode, !isVirtualFolder else { return }
         let folder = currentPath
         let current = FolderSort.forFolder(folder)
         let options = FolderSort.allCases
@@ -585,6 +625,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     }
 
     private func displayPath(_ path: String) -> String {
+        if path == Pins.recentsPath { return "Recents" }
+        if path == Pins.applicationsPath { return "Applications" }
+        if path == Pins.iCloudPath { return "iCloud Drive" }
         let home = NSHomeDirectory()
         if path == home { return "~" }
         if path.hasPrefix(home + "/") { return "~" + path.dropFirst(home.count) }
@@ -614,7 +657,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     /// "a/b/c" matches each segment against successive folder levels below the base; results keep their relative path.
     private func runPathSearch(generation gen: UInt64) {
         var pattern = query
-        var base = currentPath
+        var base = isVirtualFolder ? NSHomeDirectory() : currentPath
         if pattern.hasPrefix("/") { base = "/"; pattern.removeFirst() }
         else if pattern.hasPrefix("~/") { base = NSHomeDirectory(); pattern.removeFirst(2) }
         var parts = pattern.components(separatedBy: "/")
@@ -708,7 +751,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             DispatchQueue.main.async {
                 guard let self, gen == self.filterGeneration else { return }
                 self.matches = indices
-                if case .browse = self.mode { self.showCreateRows = !exact && !q.contains("/") }
+                if case .browse = self.mode { self.showCreateRows = !exact && !q.contains("/") && !self.isVirtualFolder }
                 self.tableView.reloadData()
                 if self.rowCount > 0 { self.selectRow(0) }
                 self.setStatus("\(indices.count) of \(listing.count)")
@@ -721,14 +764,15 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var rowCount: Int {
         if let pathResults { return pathResults.count }
         let base = matches?.count ?? listing?.count ?? 0
-        return pinned.count + base + (showCreateRows ? 2 : 0)
+        return pinned.count + separatorCount + base + (showCreateRows ? 2 : 0)
     }
 
     private func row(at index: Int) -> Row? {
         guard index >= 0, index < rowCount else { return nil }
         if let pathResults { return .pathResult(pathResults[index]) }
         if index < pinned.count { return .pinned(pinned[index]) }
-        let index = index - pinned.count
+        if separatorCount == 1, index == pinned.count { return .separator }
+        let index = index - pinned.count - separatorCount
         let base = matches?.count ?? listing?.count ?? 0
         if index < base { return .entry(matches.map { Int($0[index]) } ?? index) }
         return index == base ? .createFolder : .createFile
@@ -743,7 +787,17 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private func moveSelection(by delta: Int) {
         guard rowCount > 0 else { return }
-        selectRow(min(max(tableView.selectedRow + delta, 0), rowCount - 1))
+        var target = min(max(tableView.selectedRow + delta, 0), rowCount - 1)
+        if case .separator? = row(at: target) {
+            target = delta > 0 ? min(target + 1, rowCount - 1) : max(target - 1, 0)
+        }
+        selectRow(target)
+    }
+
+    func tableView(_ tableView: NSTableView, shouldSelectRow rowIndex: Int) -> Bool {
+        if tableView === folderPreviewTable { return false }
+        if case .separator? = row(at: rowIndex) { return false }
+        return true
     }
 
     private var visibleRows: Int { max(1, Int(scrollView.contentSize.height / tableView.rowHeight) - 1) }
@@ -769,7 +823,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         if let r = selectedPathResult { return r.path }
         if let p = selectedPinned { return p.path }
         guard let listing, let i = selectedEntryIndex else { return nil }
-        return listing.fullPath(at: i)
+        return entryPath(i)
     }
 
     /// True when the selected browse row is a folder (an entry directory, a dir symlink, or a pinned folder).
@@ -785,7 +839,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         if listing.isDirectory(at: i) { return true }
         guard listing.isSymlink(at: i) else { return false }
         var isDir: ObjCBool = false
-        return FileManager.default.fileExists(atPath: listing.fullPath(at: i), isDirectory: &isDir) && isDir.boolValue
+        return FileManager.default.fileExists(atPath: entryPath(i), isDirectory: &isDir) && isDir.boolValue
     }
 
     // MARK: - Keyboard
@@ -882,10 +936,12 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             return
         case (.browse, .pinned(let p)):
             navigate(to: p.path)
+        case (.browse, .separator):
+            return
         case (.browse, .pathResult(let r)):
             if r.isDirectory { navigate(to: r.path) } else { hide(); NSWorkspace.shared.open(URL(fileURLWithPath: r.path)) }
         case (.browse, .entry(let i)):
-            let path = listing.fullPath(at: i)
+            let path = entryPath(i)
             if isNavigableDirectory(entry: i) {
                 navigate(to: path)
             } else {
@@ -900,6 +956,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     }
 
     private func goToParent() {
+        if Pins.isVirtual(currentPath) { navigate(to: NSHomeDirectory()); return }
         guard currentPath != "/" else { return }
         let url = URL(fileURLWithPath: currentPath)
         navigate(to: url.deletingLastPathComponent().path, selecting: url.lastPathComponent)
@@ -1001,7 +1058,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private var markedPaths: [String] {
         guard let listing else { return [] }
-        return marked.sorted().map { listing.fullPath(at: $0) }
+        return marked.sorted().map { entryPath($0) }
     }
 
     private func showBatchActions() {
@@ -1057,17 +1114,14 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private func showActions() {
         guard case .browse = mode, let path = selectedBrowsePath else { return }
+        if Pins.isVirtual(path) { navigate(to: path); return }
         let name = URL(fileURLWithPath: path).lastPathComponent
         var pinActions: [Action] = []
-        if selectedIsFolder {
+        if selectedIsFolder, !Pins.isVirtual(path) {
             let isFav = Pins.isFavorite(path)
             pinActions.append(Action(title: isFav ? "Remove from Favorites" : "Add to Favorites", symbol: isFav ? "star.slash" : "star") {
                 Pins.toggleFavorite(path)
             })
-        }
-        if let pin = selectedPinned, !pin.isFavorite {
-            pinActions.append(Action(title: "Remove from Recents", symbol: "clock.badge.xmark") { Pins.recents = Pins.recents.filter { $0 != path } })
-            pinActions.append(Action(title: "Clear Recents", symbol: "clock.arrow.circlepath") { Pins.clearRecents() })
         }
         let actions: [Action] = pinActions + [
             Action(title: "Open", symbol: "arrow.up.forward.app") { [weak self] in
@@ -1239,14 +1293,29 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private func cachedIcon(forFile path: String) -> NSImage {
         if let cached = iconCache[path] { return cached }
+        let t0 = Perf.now()
         let image = NSWorkspace.shared.icon(forFile: path)
         iconCache[path] = image
+        if Perf.ms(since: t0) > 2 { Perf.report("icon.slow", since: t0) }
         return image
     }
 
     private func icon(forEntry i: Int, in listing: DirectoryListing) -> NSImage {
         if case .picker(let picker, _) = mode { return picker.icon(i) }
+        if virtualPaths != nil { return cachedIcon(forFile: entryPath(i)) }
         return listing.isDirectory(at: i) ? folderIcon : listing.isSymlink(at: i) ? linkIcon : fileIcon
+    }
+
+    private func separatorCell(for tableView: NSTableView) -> NSView {
+        let id = NSUserInterfaceItemIdentifier("Separator")
+        if let v = tableView.makeView(withIdentifier: id, owner: nil) { return v }
+        let v = NSView(frame: NSRect(x: 0, y: 0, width: tableView.bounds.width, height: tableView.rowHeight))
+        v.identifier = id
+        let line = NSBox(frame: NSRect(x: 12, y: (tableView.rowHeight - 1) / 2, width: v.bounds.width - 24, height: 1))
+        line.boxType = .separator
+        line.autoresizingMask = [.width]
+        v.addSubview(line)
+        return v
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
@@ -1278,9 +1347,19 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             let parent = (r.relative as NSString).deletingLastPathComponent
             cell.configure(name: (r.path as NSString).lastPathComponent, detail: parent.isEmpty ? nil : parent, image: image)
         case .pinned(let pin):
-            let symbol = pin.isFavorite ? "star.fill" : "clock"
-            let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)!
-            cell.configure(name: pin.name, detail: displayPath((pin.path as NSString).deletingLastPathComponent), image: image)
+            switch pin.kind {
+            case .recents:
+                cell.configure(name: pin.name, image: NSImage(systemSymbolName: "clock", accessibilityDescription: nil)!)
+            case .applications:
+                cell.configure(name: pin.name, image: cachedIcon(forFile: "/Applications"))
+            case .icloud:
+                cell.configure(name: pin.name, image: NSImage(systemSymbolName: "icloud", accessibilityDescription: nil)!)
+            case .favorite:
+                let image = NSImage(systemSymbolName: "star.fill", accessibilityDescription: nil)!
+                cell.configure(name: pin.name, detail: displayPath((pin.path as NSString).deletingLastPathComponent), image: image)
+            }
+        case .separator:
+            return separatorCell(for: tableView)
         case .entry(let i):
             let markState: MarkState = selectionMode && { if case .browse = mode { return true } else { return false } }()
                 ? (marked.contains(i) ? .marked : .unmarked) : .hidden

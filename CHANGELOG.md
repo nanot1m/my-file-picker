@@ -6,8 +6,13 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 
 ## [Unreleased]
 
-### Changed
-- Recent folders no longer appear in search results; they show only on the empty start page. Favorites still match typed queries.
+## [0.10.0] - 2026-11-05
+
+### Added
+- Start page now opens with Recents (recently used files, like Finder's Recents), Applications and iCloud Drive at the top, followed by favorites, a separator, and the home folder.
+
+### Removed
+- Recent folders list and its settings (recents count, Clear Recents).
 
 ## [0.9.0] - 2026-11-05
 
@@ -106,7 +111,8 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 - Fuzzy search field with "Create folder" / "Create file" rows for unmatched names.
 - Hints bar, transparent rounded corners, standalone `fsbench` benchmark, engine tests.
 
-[Unreleased]: https://github.com/nanot1m/my-file-picker/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/nanot1m/my-file-picker/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/nanot1m/my-file-picker/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/nanot1m/my-file-picker/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/nanot1m/my-file-picker/compare/v0.7.0...v0.8.1
 [0.7.0]: https://github.com/nanot1m/my-file-picker/compare/v0.6.0...v0.7.0

@@ -102,15 +102,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let updateStatus = NSTextField(labelWithString: "")
     private let checkButton = NSButton(title: "Check Now", target: nil, action: nil)
     private let autoUpdateBox = NSButton(checkboxWithTitle: "Install updates automatically", target: nil, action: nil)
-    private let pinsBox = NSButton(checkboxWithTitle: "Show favorites and recents on top", target: nil, action: nil)
-    private let clearRecentsButton = NSButton(title: "Clear Recents", target: nil, action: nil)
-    private let recentsField = NSTextField(string: "")
-    private let recentsStepper = NSStepper()
+    private let pinsBox = NSButton(checkboxWithTitle: "Show favorites on the start page", target: nil, action: nil)
     var onRecordingChanged: ((Bool) -> Void)?
 
     init(updater: Updater) {
         self.updater = updater
-        let size = NSSize(width: 380, height: 390)
+        let size = NSSize(width: 380, height: 330)
         let window = SettingsWindow(contentRect: NSRect(origin: .zero, size: size),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "File Picker Settings"
@@ -186,7 +183,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         upHint.textColor = .secondaryLabelColor
         content.addSubview(upHint)
 
-        let pinsLabel = NSTextField(labelWithString: "Shortcuts")
+        let pinsLabel = NSTextField(labelWithString: "Favorites")
         pinsLabel.frame = NSRect(x: 20, y: size.height - 284, width: 130, height: 20)
         pinsLabel.alignment = .right
         content.addSubview(pinsLabel)
@@ -195,44 +192,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         pinsBox.action = #selector(togglePins)
         pinsBox.controlSize = .small
         pinsBox.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        pinsBox.frame = NSRect(x: 158, y: size.height - 284, width: 210, height: 20)
+        pinsBox.frame = NSRect(x: 158, y: size.height - 284, width: 220, height: 20)
         content.addSubview(pinsBox)
-
-        clearRecentsButton.target = self
-        clearRecentsButton.action = #selector(clearRecents)
-        clearRecentsButton.bezelStyle = .rounded
-        clearRecentsButton.controlSize = .small
-        clearRecentsButton.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        let recentsLabel = NSTextField(labelWithString: "Show up to")
-        recentsLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        recentsLabel.frame = NSRect(x: 160, y: size.height - 310, width: 66, height: 18)
-        content.addSubview(recentsLabel)
-
-        recentsField.frame = NSRect(x: 226, y: size.height - 312, width: 34, height: 21)
-        recentsField.controlSize = .small
-        recentsField.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        recentsField.alignment = .right
-        recentsField.target = self
-        recentsField.action = #selector(recentsCountEdited)
-        content.addSubview(recentsField)
-
-        recentsStepper.frame = NSRect(x: 262, y: size.height - 314, width: 16, height: 24)
-        recentsStepper.minValue = 0
-        recentsStepper.maxValue = 30
-        recentsStepper.increment = 1
-        recentsStepper.valueWraps = false
-        recentsStepper.controlSize = .small
-        recentsStepper.target = self
-        recentsStepper.action = #selector(recentsStepped)
-        content.addSubview(recentsStepper)
-
-        let recentsSuffix = NSTextField(labelWithString: "recent folders")
-        recentsSuffix.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        recentsSuffix.frame = NSRect(x: 284, y: size.height - 310, width: 90, height: 18)
-        content.addSubview(recentsSuffix)
-
-        clearRecentsButton.frame = NSRect(x: 158, y: size.height - 342, width: 110, height: 24)
-        content.addSubview(clearRecentsButton)
 
         NotificationCenter.default.addObserver(self, selector: #selector(refreshUpdateStatus), name: Updater.statusChanged, object: nil)
 
@@ -254,8 +215,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         refreshUpdateStatus()
         autoUpdateBox.state = Updater.autoUpdateEnabled ? .on : .off
         pinsBox.state = Pins.enabled ? .on : .off
-        recentsField.integerValue = Pins.maxRecents
-        recentsStepper.integerValue = Pins.maxRecents
         statusTimer?.invalidate()
         statusTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.refreshAccessibilityStatus()
@@ -303,21 +262,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     @objc private func togglePins() {
         Pins.enabled = pinsBox.state == .on
-    }
-
-    @objc private func recentsStepped() {
-        Pins.maxRecents = recentsStepper.integerValue
-        recentsField.integerValue = Pins.maxRecents
-    }
-
-    @objc private func recentsCountEdited() {
-        Pins.maxRecents = recentsField.integerValue
-        recentsField.integerValue = Pins.maxRecents
-        recentsStepper.integerValue = Pins.maxRecents
-    }
-
-    @objc private func clearRecents() {
-        Pins.clearRecents()
     }
 
     @objc private func toggleAutoUpdate() {

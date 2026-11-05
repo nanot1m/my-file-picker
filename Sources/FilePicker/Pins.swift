@@ -1,34 +1,40 @@
 import Foundation
 
-struct Pinned: Equatable {
-    let path: String
-    let isFavorite: Bool
-    var name: String { (path as NSString).lastPathComponent.isEmpty ? path : (path as NSString).lastPathComponent }
+enum PinKind: Equatable {
+    case recents
+    case applications
+    case icloud
+    case favorite
 }
 
-/// Favorites are user-curated; recents are the last folders visited, most recent first.
+struct Pinned: Equatable {
+    let path: String
+    let kind: PinKind
+    var name: String {
+        switch kind {
+        case .recents: return "Recents"
+        case .applications: return "Applications"
+        case .icloud: return "iCloud Drive"
+        case .favorite: return (path as NSString).lastPathComponent.isEmpty ? path : (path as NSString).lastPathComponent
+        }
+    }
+    var isVirtual: Bool { kind == .recents || kind == .applications }
+}
+
+/// Start-page shortcuts: fixed system entries plus user favorites, shown only in the home folder.
 enum Pins {
     static let changed = Notification.Name("FilePicker.pinsChanged")
     static let favoritesKey = "favorites"
-    static let recentsKey = "recents"
     static let showKey = "showPins"
-    static let maxRecentsKey = "maxRecents"
-    static let keptRecents = 50
+    static let recentsPath = "fp://recents"
+    static let applicationsPath = "fp://applications"
+    static let iCloudPath = NSHomeDirectory() + "/Library/Mobile Documents/com~apple~CloudDocs"
 
-    /// How many recent folders the start page shows; 0 hides recents entirely.
-    static var maxRecents: Int {
-        get { UserDefaults.standard.object(forKey: maxRecentsKey) as? Int ?? 5 }
-        set { UserDefaults.standard.set(max(0, min(newValue, 30)), forKey: maxRecentsKey); NotificationCenter.default.post(name: changed, object: nil) }
-    }
+    static func isVirtual(_ path: String) -> Bool { path.hasPrefix("fp://") }
 
     static var favorites: [String] {
         get { UserDefaults.standard.stringArray(forKey: favoritesKey) ?? [] }
         set { UserDefaults.standard.set(newValue, forKey: favoritesKey); NotificationCenter.default.post(name: changed, object: nil) }
-    }
-
-    static var recents: [String] {
-        get { UserDefaults.standard.stringArray(forKey: recentsKey) ?? [] }
-        set { UserDefaults.standard.set(Array(newValue.prefix(keptRecents)), forKey: recentsKey); NotificationCenter.default.post(name: changed, object: nil) }
     }
 
     static var enabled: Bool {
@@ -44,25 +50,15 @@ enum Pins {
         favorites = list
     }
 
-    static func recordVisit(_ path: String) {
-        guard path != NSHomeDirectory() else { return }
-        var list = recents.filter { $0 != path }
-        list.insert(path, at: 0)
-        recents = list
-    }
-
-    static func clearRecents() { recents = [] }
-
     static func forget(_ path: String) {
-        recents = recents.filter { $0 != path }
         favorites = favorites.filter { $0 != path }
     }
 
-    /// Start-page rows shown only in the home folder: favorites, then recents not already favorited.
     static func rows(excluding current: String) -> [Pinned] {
-        guard enabled, current == NSHomeDirectory() else { return [] }
-        let favs = favorites
-        let recent = recents.filter { !favorites.contains($0) && $0 != current }.prefix(maxRecents)
-        return favs.map { Pinned(path: $0, isFavorite: true) } + recent.map { Pinned(path: $0, isFavorite: false) }
+        guard current == NSHomeDirectory() else { return [] }
+        var rows = [Pinned(path: recentsPath, kind: .recents), Pinned(path: applicationsPath, kind: .applications)]
+        if FileManager.default.fileExists(atPath: iCloudPath) { rows.append(Pinned(path: iCloudPath, kind: .icloud)) }
+        if enabled { rows += favorites.map { Pinned(path: $0, kind: .favorite) } }
+        return rows
     }
 }
