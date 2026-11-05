@@ -6,6 +6,9 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 
 ## [Unreleased]
 
+### Changed
+- Recent folders no longer appear in search results; they show only on the empty start page. Favorites still match typed queries.
+
 ## [0.9.0] - 2026-11-05
 
 ### Changed

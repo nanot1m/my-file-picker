@@ -143,7 +143,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         let base = Pins.rows(excluding: currentPath)
         if query.contains("/") { pinned = []; return }
         if query.isEmpty { pinned = base; return }
-        pinned = base.compactMap { pin -> (Pinned, Int32)? in
+        // Recents only decorate the empty start page; search results list favorites and folder contents.
+        pinned = base.filter(\.isFavorite).compactMap { pin -> (Pinned, Int32)? in
             let score = fse_fuzzy_score(pin.name, query)
             return score >= 0 ? (pin, score) : nil
         }.sorted { $0.1 > $1.1 }.map(\.0)
