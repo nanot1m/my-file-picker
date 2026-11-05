@@ -6,6 +6,8 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-05
+
 ### Changed
 - Preview of text files larger than 1 MB shows only the first 1,000 lines, read from the first megabyte on a background queue, instead of handing the whole file to Quick Look.
 
@@ -101,7 +103,8 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 - Fuzzy search field with "Create folder" / "Create file" rows for unmatched names.
 - Hints bar, transparent rounded corners, standalone `fsbench` benchmark, engine tests.
 
-[Unreleased]: https://github.com/nanot1m/my-file-picker/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/nanot1m/my-file-picker/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/nanot1m/my-file-picker/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/nanot1m/my-file-picker/compare/v0.7.0...v0.8.1
 [0.7.0]: https://github.com/nanot1m/my-file-picker/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/nanot1m/my-file-picker/compare/v0.5.0...v0.6.0
