@@ -6,6 +6,15 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-06
+
+### Added
+- "Export Debug Report…" in the menu-bar menu writes a text file to the Desktop with app, system, settings, permission, Spotlight, engine and timing details (no file names), for bug reports.
+- Recents can be sorted with ⌘⇧S by Date Last Opened (default), Name, or Date Added; the choice is remembered.
+
+### Fixed
+- Recents order now matches Finder (newest last-opened first); the list is sorted explicitly instead of relying on the Spotlight query's ordering.
+
 ## [0.10.0] - 2026-11-05
 
 ### Added
@@ -111,7 +120,8 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 - Fuzzy search field with "Create folder" / "Create file" rows for unmatched names.
 - Hints bar, transparent rounded corners, standalone `fsbench` benchmark, engine tests.
 
-[Unreleased]: https://github.com/nanot1m/my-file-picker/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/nanot1m/my-file-picker/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/nanot1m/my-file-picker/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/nanot1m/my-file-picker/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/nanot1m/my-file-picker/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/nanot1m/my-file-picker/compare/v0.7.0...v0.8.1

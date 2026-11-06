@@ -102,6 +102,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var marked = Set<Int>()
     private var pinned: [Pinned] = []
     private var virtualPaths: [String]?
+    private var currentVirtual: VirtualListing?
     private var filterGeneration: UInt64 = 0
     private var matches: [UInt32]?
     private var showCreateRows = false
@@ -546,6 +547,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             case .success(let listing):
                 self.listing = listing
                 self.virtualPaths = nil
+                self.currentVirtual = nil
                 self.currentPath = path
                 self.pathLabel.stringValue = self.pathLabelText(for: path)
                 self.stats = String(format: "%d items · %.2f ms", listing.count, listing.readMilliseconds + listing.sortMilliseconds)
@@ -576,8 +578,9 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
             Perf.report("virtual.load", since: t0)
             self.listing = virtual.listing
             self.virtualPaths = virtual.paths
+            self.currentVirtual = virtual
             self.currentPath = path
-            self.pathLabel.stringValue = self.displayPath(path)
+            self.pathLabel.stringValue = self.pathLabelText(for: path)
             self.stats = "\(virtual.listing.count) items"
             self.setStatus(self.stats)
             self.clearQuery()
@@ -601,14 +604,14 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private func pathLabelText(for path: String) -> String {
         let sort = FolderSort.forFolder(path)
-        return sort == .name ? displayPath(path) : "\(displayPath(path))  ·  by \(sort.shortTitle)"
+        return sort == FolderSort.defaultSort(for: path) ? displayPath(path) : "\(displayPath(path))  ·  by \(sort.shortTitle)"
     }
 
     private func chooseSort() {
-        guard case .browse = mode, !isVirtualFolder else { return }
+        guard case .browse = mode, currentPath != Pins.applicationsPath else { return }
         let folder = currentPath
         let current = FolderSort.forFolder(folder)
-        let options = FolderSort.allCases
+        let options = FolderSort.options(for: folder)
         let selectedName = selectedBrowsePath.map { ($0 as NSString).lastPathComponent }
         enterPicker(Picker(
             title: "Sort “\((folder as NSString).lastPathComponent)” by",
@@ -620,7 +623,19 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
                 guard let self else { return }
                 self.leaveMode()
                 FolderSort.set(options[i], forFolder: folder)
-                self.navigate(to: folder, selecting: selectedName)
+                if let virtual = self.currentVirtual, self.currentPath == folder {
+                    let resorted = virtual.resorted(by: options[i], path: folder)
+                    self.currentVirtual = resorted
+                    self.listing = resorted.listing
+                    self.virtualPaths = resorted.paths
+                    self.pathLabel.stringValue = self.pathLabelText(for: folder)
+                    self.tableView.reloadData()
+                    if let name = selectedName, let row = (0..<self.rowCount).first(where: { self.rowPath($0).map { ($0 as NSString).lastPathComponent } == name }) {
+                        self.selectRow(row)
+                    } else if self.rowCount > 0 { self.selectRow(0) }
+                } else {
+                    self.navigate(to: folder, selecting: selectedName)
+                }
             }))
     }
 

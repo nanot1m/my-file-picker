@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -16,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(toggleItem)
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Export Debug Report…", action: #selector(exportDebugReport), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit File Picker", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
@@ -70,6 +72,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggle() { launcher.toggle() }
+
+    @objc private func exportDebugReport() {
+        launcher.hideIfVisible()
+        DebugReport.generate(updater: updater) { url in
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+    }
 
     @objc private func openSettings() {
         launcher.hideIfVisible()

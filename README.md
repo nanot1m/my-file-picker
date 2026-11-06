@@ -38,7 +38,7 @@ make run
 | Enter | Open the selected file with its default app |
 | ⌘ Enter | Actions for the selected item, fuzzy-searchable in the same panel |
 | start page | The panel always opens in your home folder. At the top: Recents (files by last-used date, like Finder), Applications, iCloud Drive, then your favorite folders (★), a separator, and the home folder contents. Typing filters favorites too. Add or remove favorites from the ⌘ Enter actions list; hide them in Settings |
-| ⌘⇧S | Sort the current folder by name or by date added (newest first); remembered per folder |
+| ⌘⇧S | Sort the current folder by name or by date added (newest first); in Recents also by date last opened. Remembered per folder |
 | ⌘S / Tab | Selection mode: Enter marks the current row, Tab marks and moves on, ⇧Tab moves back, ⌘A marks all, Esc leaves. ⌘ Enter then runs an action on every marked item (Open, Open With, Reveal, Duplicate, Copy, Paste into app, Copy paths, Trash) |
 | ⌘P | Toggle a preview column: Quick Look for files, a contents listing for folders (persists) |
 | ← | Go to the parent folder (when the search field is empty) |
@@ -61,6 +61,10 @@ When the typed name doesn't match anything exactly, two extra rows appear at the
 ## Updates
 
 The app checks GitHub Releases every six hours and on "Check for Updates…" in the menu-bar menu or Settings. With "Install updates automatically" on (the default), a newer release is downloaded, its code signature verified (and its Team ID matched to the installed app's when the installed app has one), swapped into place, and the app relaunches. Turn it off in Settings to be asked first. Builds running from the repo's `build/` folder never self-replace.
+
+## Reporting a problem
+
+Choose "Export Debug Report…" from the menu-bar menu. It writes `FilePicker-debug-<timestamp>.txt` to your Desktop with the app version and signature, macOS and hardware, settings, permission state, Spotlight indexing status, folder-engine timings, recent timing events, and a Recents probe (counts and date range only). Attach it to the issue.
 
 ## Permissions
 

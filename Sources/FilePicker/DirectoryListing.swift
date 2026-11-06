@@ -4,28 +4,50 @@ import Foundation
 enum FolderSort: Int32, CaseIterable {
     case name = 0
     case dateAdded = 1
+    case lastOpened = 2
 
     var title: String {
         switch self {
         case .name: return "Name"
         case .dateAdded: return "Date Added (newest first)"
+        case .lastOpened: return "Date Last Opened (newest first)"
         }
     }
 
-    var shortTitle: String { self == .name ? "name" : "date added" }
-    var symbol: String { self == .name ? "textformat.abc" : "calendar.badge.plus" }
+    var shortTitle: String {
+        switch self {
+        case .name: return "name"
+        case .dateAdded: return "date added"
+        case .lastOpened: return "last opened"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .name: return "textformat.abc"
+        case .dateAdded: return "calendar.badge.plus"
+        case .lastOpened: return "clock"
+        }
+    }
+
+    /// Sorts offered for a given folder; only Recents knows when files were last opened.
+    static func options(for path: String) -> [FolderSort] {
+        path == Pins.recentsPath ? [.lastOpened, .name, .dateAdded] : [.name, .dateAdded]
+    }
+
+    static func defaultSort(for path: String) -> FolderSort { path == Pins.recentsPath ? .lastOpened : .name }
 
     private static let key = "folderSorts"
 
     /// Per-folder preference; folders without one sort by name.
     static func forFolder(_ path: String) -> FolderSort {
         let table = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
-        return table[path].flatMap { FolderSort(rawValue: Int32($0)) } ?? .name
+        return table[path].flatMap { FolderSort(rawValue: Int32($0)) } ?? defaultSort(for: path)
     }
 
     static func set(_ sort: FolderSort, forFolder path: String) {
         var table = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
-        if sort == .name { table.removeValue(forKey: path) } else { table[path] = Int(sort.rawValue) }
+        if sort == defaultSort(for: path) { table.removeValue(forKey: path) } else { table[path] = Int(sort.rawValue) }
         UserDefaults.standard.set(table, forKey: key)
     }
 }
