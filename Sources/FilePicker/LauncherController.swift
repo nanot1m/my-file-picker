@@ -54,6 +54,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         let row: Int
         let query: String
         let matches: [UInt32]?
+        let pathResults: [PathResult]?
         let showCreateRows: Bool
         let scrollOrigin: NSPoint
     }
@@ -982,7 +983,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private func saveBrowseState() -> BrowseState? {
         guard case .browse = mode, let listing else { return nil }
-        return BrowseState(listing: listing, row: tableView.selectedRow, query: query, matches: matches,
+        return BrowseState(listing: listing, row: tableView.selectedRow, query: query, matches: matches, pathResults: pathResults,
                            showCreateRows: showCreateRows, scrollOrigin: scrollView.contentView.bounds.origin)
     }
 
@@ -990,6 +991,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         guard let saved = saveBrowseState() else { return }
         mode = .picker(picker, saved: saved)
         pinned = []
+        pathResults = nil
         listing = picker.listing
         pathLabel.stringValue = picker.title
         searchField.placeholderString = picker.placeholder
@@ -1018,6 +1020,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         searchField.stringValue = saved.query
         searchField.currentEditor()?.selectedRange = NSRange(location: saved.query.utf16.count, length: 0)
         matches = saved.matches
+        pathResults = saved.pathResults
         showCreateRows = saved.showCreateRows
         tableView.reloadData()
         scrollView.contentView.scroll(to: saved.scrollOrigin)
@@ -1209,6 +1212,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         let url = URL(fileURLWithPath: target)
         mode = .rename(target: target, saved: saved)
         pinned = []
+        pathResults = nil
         pathLabel.stringValue = "Rename “\(url.lastPathComponent)”"
         hintsBar.hints = [Hint(key: "↵", label: "rename"), Hint(key: "esc", label: "cancel")]
         matches = nil
