@@ -100,7 +100,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
     private var pathResults: [PathResult]?
     private var pathListingCache: [String: DirectoryListing] = [:]
     private var selectionMode = false
-    private var marked = Set<Int>()
+    private var marked = Set<String>()
     private var pinned: [Pinned] = []
     private var virtualPaths: [String]?
     private var currentVirtual: VirtualListing?
@@ -1050,8 +1050,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private func toggleMarkOnSelection(advance: Int) {
         if !selectionMode { enterSelectionMode() }
-        if let i = selectedEntryIndex {
-            if marked.contains(i) { marked.remove(i) } else { marked.insert(i) }
+        if let path = markablePath(at: tableView.selectedRow) {
+            if marked.contains(path) { marked.remove(path) } else { marked.insert(path) }
             tableView.reloadData(forRowIndexes: IndexSet(integer: tableView.selectedRow), columnIndexes: IndexSet(integer: 0))
         }
         moveSelection(by: advance)
@@ -1060,7 +1060,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
 
     private func markAllVisible() {
         for row in 0..<rowCount {
-            if case .entry(let i)? = self.row(at: row) { marked.insert(i) }
+            if let path = markablePath(at: row) { marked.insert(path) }
         }
         reloadVisibleCells()
         updateSelectionStatus()
@@ -1075,9 +1075,22 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         tableView.reloadData(forRowIndexes: IndexSet(0..<rowCount), columnIndexes: IndexSet(integer: 0))
     }
 
+    /// Entries and path-search results can be marked; pinned shortcuts and create rows cannot.
+    private func markablePath(at row: Int) -> String? {
+        switch self.row(at: row) {
+        case .entry(let i)?: return entryPath(i)
+        case .pathResult(let r)?: return r.path
+        default: return nil
+        }
+    }
+
     private var markedPaths: [String] {
-        guard let listing else { return [] }
-        return marked.sorted().map { entryPath($0) }
+        (0..<rowCount).compactMap { markablePath(at: $0) }.filter { marked.contains($0) }
+    }
+
+    private func markState(forPath path: String) -> MarkState {
+        guard selectionMode, case .browse = mode else { return .hidden }
+        return marked.contains(path) ? .marked : .unmarked
     }
 
     private func showBatchActions() {
@@ -1365,7 +1378,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         case .pathResult(let r):
             let image = r.isDirectory ? folderIcon : fileIcon
             let parent = (r.relative as NSString).deletingLastPathComponent
-            cell.configure(name: (r.path as NSString).lastPathComponent, detail: parent.isEmpty ? nil : parent, image: image)
+            cell.configure(name: (r.path as NSString).lastPathComponent, detail: parent.isEmpty ? nil : parent, image: image, mark: markState(forPath: r.path))
         case .pinned(let pin):
             switch pin.kind {
             case .recents:
@@ -1381,9 +1394,7 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         case .separator:
             return separatorCell(for: tableView)
         case .entry(let i):
-            let markState: MarkState = selectionMode && { if case .browse = mode { return true } else { return false } }()
-                ? (marked.contains(i) ? .marked : .unmarked) : .hidden
-            cell.configure(name: listing.name(at: i), image: icon(forEntry: i, in: listing), mark: markState)
+            cell.configure(name: listing.name(at: i), image: icon(forEntry: i, in: listing), mark: markState(forPath: entryPath(i)))
         case .createFolder:
             cell.configure(name: "Create folder “\(query)”", image: NSImage(systemSymbolName: "folder.badge.plus", accessibilityDescription: nil)!, secondary: true)
         case .createFile:

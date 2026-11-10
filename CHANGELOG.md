@@ -6,6 +6,11 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-11-10
+
+### Fixed
+- Selection mode (Tab, ⌘S, ⌘A) works on path-search results; marks are tracked by path.
+
 ## [0.11.2] - 2026-11-10
 
 ### Fixed
@@ -130,7 +135,8 @@ The Release workflow publishes the section matching the pushed tag as the GitHub
 - Fuzzy search field with "Create folder" / "Create file" rows for unmatched names.
 - Hints bar, transparent rounded corners, standalone `fsbench` benchmark, engine tests.
 
-[Unreleased]: https://github.com/nanot1m/my-file-picker/compare/v0.11.2...HEAD
+[Unreleased]: https://github.com/nanot1m/my-file-picker/compare/v0.11.3...HEAD
+[0.11.3]: https://github.com/nanot1m/my-file-picker/compare/v0.11.2...v0.11.3
 [0.11.2]: https://github.com/nanot1m/my-file-picker/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/nanot1m/my-file-picker/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/nanot1m/my-file-picker/compare/v0.10.0...v0.11.0
