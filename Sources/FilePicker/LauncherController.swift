@@ -154,7 +154,8 @@ final class LauncherController: NSObject, NSWindowDelegate, NSTableViewDataSourc
         let base = Pins.rows(excluding: currentPath)
         if query.contains("/") { pinned = []; return }
         if query.isEmpty { pinned = base; return }
-        pinned = base.compactMap { pin -> (Pinned, Int32)? in
+        // System shortcuts only decorate the empty start page; a typed query matches favorites and folder contents.
+        pinned = base.filter { $0.kind == .favorite }.compactMap { pin -> (Pinned, Int32)? in
             let score = fse_fuzzy_score(pin.name, query)
             return score >= 0 ? (pin, score) : nil
         }.sorted { $0.1 > $1.1 }.map(\.0)
